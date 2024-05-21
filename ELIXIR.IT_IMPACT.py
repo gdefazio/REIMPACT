@@ -170,8 +170,7 @@ if __name__ == '__main__':
     src = pd.read_excel('./Table S1-SAB-160224_lst.xlsx')
     src = src[~src['Primary doi first then others'].isna()]
     # src = src[:4]
-    src4PyB = src.copy()
-    zinput = zip(src['Service'],src['Primary doi first then others'])
+
     OpenAlexServiceList = [OpenAlexService(x,y) for x,y in zinput]
     src['OpenAlexCitations'] = [el.citations for el in OpenAlexServiceList]
     src['OpenAlexCitationsOfCiting'] = [el.citationsOfCiting for el in OpenAlexServiceList]
@@ -185,6 +184,8 @@ if __name__ == '__main__':
             aux['sum'] = aux.loc[:, aux.columns[1:]].sum(axis=1)
             aux.to_excel(buf, sheet_name=re.sub(r"[/@)(]", "_", df.service))
 
+    src4PyB = src.copy()
+    zinput = zip(src4PyB['Service'], src4PyB['Primary doi first then others'])
     PyBlioInstance = [MyCitationOverview(servname=a, identifier=[el.strip() for el in b.split(',')],
                                        start=2000, end=2024, id_type='doi',
                                        apykey='b3effd27f35c5a12b039321e01d7d740') for a, b in zinput]
