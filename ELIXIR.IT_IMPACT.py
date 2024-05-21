@@ -170,7 +170,7 @@ if __name__ == '__main__':
     src = pd.read_excel('./Table S1-SAB-160224_lst.xlsx')
     src = src[~src['Primary doi first then others'].isna()]
     # src = src[:4]
-
+    zinput = zip(src['Service'], src['Primary doi first then others'])
     OpenAlexServiceList = [OpenAlexService(x,y) for x,y in zinput]
     src['OpenAlexCitations'] = [el.citations for el in OpenAlexServiceList]
     src['OpenAlexCitationsOfCiting'] = [el.citationsOfCiting for el in OpenAlexServiceList]
@@ -189,6 +189,8 @@ if __name__ == '__main__':
     PyBlioInstance = [MyCitationOverview(servname=a, identifier=[el.strip() for el in b.split(',')],
                                        start=2000, end=2024, id_type='doi',
                                        apykey='b3effd27f35c5a12b039321e01d7d740') for a, b in zinput]
+    print(src4PyB.shape)
+    print(len(PyBlioInstance))
     src4PyB['PyBlioCitations'] = [el.grandTotal for el in PyBlioInstance]
     with pd.ExcelWriter('./ELIXIR.IT_IMPACT_PyBliometrix.xlsx') as buf:
         src4PyB.to_excel(buf, sheet_name='summary')
