@@ -1,15 +1,43 @@
-import numpy as np
+import os.path
+
 from pybliometrics.scopus import CitationOverview
 # from itertools import combinations
 from functools import reduce
 import pandas as pd
+import numpy as np
+import argcomplete
+import argparse
 import requests
-import json
 import pyalex
+import json
 import re
 
 # '10.1093/nar/gkr930, 10.1093/nar/gkt1115, 10.1093/nar/gkp983, 10.1093/nar/gkl950, 10.1016/s0014-5793(01)03293-8, 10.1002/cpbi.93, 10.1002/cpbi.93'
 # MY_API_KEY = '8fc3c1e2aaaf954888ae7cba80324151'
+
+
+def input_options():
+    parser = argparse.ArgumentParser(
+        description="This script interrogates OpenAlex and Scopus Api to obtain bibliometric features of papers related to ELIXIR IT services",
+        prefix_chars="-")
+    parser.add_argument("-i", "--input_excel", type=str,
+                        help="The path to the input excel. An excel format example is provided in the GitHub page",
+                        action="store", required=False,
+                        default='./Table S1-SAB-160224_lst.xlsx')
+    parser.add_argument("-o", "--output_directory", type=str,
+                        help="output directory", action="store", required=False,
+                        default="./")
+    parser.add_argument("-a", "--openalex_key", type=str,
+                        help="the OpenAlex API key to query",
+                        action="store", required=False,
+                        default='8fc3c1e2aaaf954888ae7cba80324151')
+    parser.add_argument("-p", "--pybliometrix_key", type=str,
+                        help="the OpenAlex API key to query",
+                        action="store", required=False,
+                        default='b3effd27f35c5a12b039321e01d7d740')
+
+    argcomplete.autocomplete(parser)
+    return parser.parse_args()
 
 
 class OpenAlexDoi:
@@ -21,7 +49,6 @@ class OpenAlexDoi:
         self.citations = self.object['cited_by_count']
         self.authors = pd.DataFrame(self.object['authorships'])
         self.cit_by_years = pd.DataFrame(self.object['counts_by_year'])
-        self.mamt = 'mamt'
         # self.auth2orcid = pd.DataFrame(list(self.authors['author']))[['display_name','orcid']]
 
     def get_institutions(self) -> pd.DataFrame:
@@ -155,14 +182,17 @@ class MyCitationOverview(CitationOverview):
 
 
 if __name__ == '__main__':
-    src = pd.read_excel('./Table S1-SAB-160224_lst.xlsx')
+    options = input_options()
+    input_xlsx, output_dir, alex_key, scopus_key = options.input_excel, options.output_directory, \
+        options.openalex_key, options.pybliometrix_key
+    src = pd.read_excel(input_xlsx)
     src = src[~src['Primary doi first then others'].isna()]
     zinput = zip(src['Service'], src['Primary doi first then others'])
     OpenAlexServiceList = [OpenAlexService(x,y) for x,y in zinput]
     src['OpenAlexCitations'] = [el.citations for el in OpenAlexServiceList]
     src['OpenAlexCitationsOfCiting'] = [el.citationsOfCiting for el in OpenAlexServiceList]
     institutions = pd.concat([el.institutions for el in OpenAlexServiceList], axis=0, ignore_index=True)
-    with pd.ExcelWriter('./ELIXIR.IT_IMPACT_OpenAlex.xlsx') as buf:
+    with pd.ExcelWriter(os.path.join(output_dir, 'ELIXIR.IT_IMPACT_OpenAlex.xlsx')) as buf:
         src.to_excel(buf, sheet_name='summary')
         institutions.to_excel(buf, sheet_name='institutions')
         for df in OpenAlexServiceList:
@@ -176,9 +206,9 @@ if __name__ == '__main__':
     PyBlioInstance = [MyCitationOverview(
         servname=a, identifier=[el.strip() for el in b.split(',')],
         start=2000, end=2024, id_type='doi',
-        apykey='b3effd27f35c5a12b039321e01d7d740') for a, b in zinput]
+        apykey=scopus_key) for a, b in zinput]
     src4PyB['PyBlioCitations'] = [el.grandTotal for el in PyBlioInstance]
-    with pd.ExcelWriter('./ELIXIR.IT_IMPACT_PyBliometrix.xlsx') as buf:
+    with pd.ExcelWriter(os.path.join(output_dir, 'ELIXIR.IT_IMPACT_PyBliometrix.xlsx')) as buf:
         src4PyB.to_excel(buf, sheet_name='summary')
         for inst in PyBlioInstance:
             inst.cit4year.to_excel(buf, sheet_name=re.sub(r"[/@)(]", "_", inst.servname))
