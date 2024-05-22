@@ -8,8 +8,8 @@ import json
 import pyalex
 import re
 
-'10.1093/nar/gkr930, 10.1093/nar/gkt1115, 10.1093/nar/gkp983, 10.1093/nar/gkl950, 10.1016/s0014-5793(01)03293-8, 10.1002/cpbi.93, 10.1002/cpbi.93'
-MY_API_KEY = '8fc3c1e2aaaf954888ae7cba80324151'
+# '10.1093/nar/gkr930, 10.1093/nar/gkt1115, 10.1093/nar/gkp983, 10.1093/nar/gkl950, 10.1016/s0014-5793(01)03293-8, 10.1002/cpbi.93, 10.1002/cpbi.93'
+# MY_API_KEY = '8fc3c1e2aaaf954888ae7cba80324151'
 
 
 class OpenAlexDoi:
@@ -135,41 +135,28 @@ class MyCitationOverview(CitationOverview):
         timeline_df['sum'] = self.rangeCount
         return timeline_df
 
-
-# def queryOpenAlex(doi):
-#   wrk = pyalex.Works()[f"https://doi.org/{doi}"]
-#   return wrk
-
-
-def queryScopus(doi):
-    url = ("http://api.elsevier.com/content/search/scopus?query=doi(%s)" % doi)
-    resp = requests.get(url, headers={'Accept':'application/json','X-ELS-APIKey': MY_API_KEY})
-    return json.loads(resp.text.encode('utf-8'))
-
-# def qOAList(doiString: str) -> int:
 #
-#     res = sum([OpenAlex(el)['cited_by_count'] for el in doiSplit])
-#     return res
+# def queryScopus(doi):
+#     url = ("http://api.elsevier.com/content/search/scopus?query=doi(%s)" % doi)
+#     resp = requests.get(url, headers={'Accept':'application/json','X-ELS-APIKey': MY_API_KEY})
+#     return json.loads(resp.text.encode('utf-8'))
 
-def qSList(doiString: str) -> int:
-    doiSplit = doiString.split(', ')
-    # print(doiString)
-    res = list()
-    for el in doiSplit:
-        try:
-            res.append(int(queryScopus(el)['search-results']['entry'][0]['citedby-count']))
-        except KeyError:
-            pass
-    return sum(res)
+
+# def qSList(doiString: str) -> int:
+#     doiSplit = doiString.split(', ')
+#     # print(doiString)
+#     res = list()
+#     for el in doiSplit:
+#         try:
+#             res.append(int(queryScopus(el)['search-results']['entry'][0]['citedby-count']))
+#         except KeyError:
+#             pass
+#     return sum(res)
 
 
 if __name__ == '__main__':
-    # i = OpenAlexDoi('REDItools','10.1093/nar/gkw767')
-    # print('done')
-
     src = pd.read_excel('./Table S1-SAB-160224_lst.xlsx')
     src = src[~src['Primary doi first then others'].isna()]
-    # src = src[:4]
     zinput = zip(src['Service'], src['Primary doi first then others'])
     OpenAlexServiceList = [OpenAlexService(x,y) for x,y in zinput]
     src['OpenAlexCitations'] = [el.citations for el in OpenAlexServiceList]
@@ -186,14 +173,12 @@ if __name__ == '__main__':
 
     src4PyB = src.copy()
     zinput = zip(src4PyB['Service'], src4PyB['Primary doi first then others'])
-    PyBlioInstance = [MyCitationOverview(servname=a, identifier=[el.strip() for el in b.split(',')],
-                                       start=2000, end=2024, id_type='doi',
-                                       apykey='b3effd27f35c5a12b039321e01d7d740') for a, b in zinput]
-    print(src4PyB.shape)
-    print(len(PyBlioInstance))
+    PyBlioInstance = [MyCitationOverview(
+        servname=a, identifier=[el.strip() for el in b.split(',')],
+        start=2000, end=2024, id_type='doi',
+        apykey='b3effd27f35c5a12b039321e01d7d740') for a, b in zinput]
     src4PyB['PyBlioCitations'] = [el.grandTotal for el in PyBlioInstance]
     with pd.ExcelWriter('./ELIXIR.IT_IMPACT_PyBliometrix.xlsx') as buf:
         src4PyB.to_excel(buf, sheet_name='summary')
         for inst in PyBlioInstance:
-            print(inst.authors)
             inst.cit4year.to_excel(buf, sheet_name=re.sub(r"[/@)(]", "_", inst.servname))
