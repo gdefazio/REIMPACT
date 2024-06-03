@@ -1,6 +1,7 @@
 import os.path
-
-from pybliometrics.scopus import CitationOverview
+import sys
+# from pybliometrics.scopus.utils import create_config
+# from pybliometrics.scopus import CitationOverview, utils
 # from itertools import combinations
 from functools import reduce
 import pandas as pd
@@ -142,25 +143,6 @@ class OpenAlexService:
             return obj_df1
 
 
-class MyCitationOverview(CitationOverview):
-
-    def __init__(self, identifier, servname, start=2000, end=2024,
-                 id_type = 'doi',
-                 apykey = 'b3effd27f35c5a12b039321e01d7d740'):
-        super().__init__(identifier=identifier, start=start, end=end,
-                         id_type = id_type,
-                         apykey = apykey)
-        self.start = start
-        self.end = end
-        self.servname = servname
-
-    @property
-    def cit4year(self) -> pd.DataFrame:
-        timeline_df = [[tx[1] for tx in el] for el in self.cc]
-        timeline_df = pd.DataFrame(timeline_df)
-        timeline_df.columns = range(self.start, self.end+1)
-        timeline_df['sum'] = self.rangeCount
-        return timeline_df
 
 #
 # def queryScopus(doi):
@@ -183,23 +165,69 @@ class MyCitationOverview(CitationOverview):
 
 if __name__ == '__main__':
     options = input_options()
+
     input_xlsx, output_dir, alex_key, scopus_key = options.input_excel, options.output_directory, \
         options.openalex_key, options.pybliometrix_key
+    home = os.environ['HOME']
+    config = os.path.join(home, '.config')
+    cfgfile = os.path.join(home, '.config', 'pybliometrics.cfg')
+    try:
+        os.mkdir(os.path.join(home, '.config'))
+    except FileExistsError:
+        pass
+    with open(cfgfile, 'wt') as cfg:
+        cfg.write("[Directories]\n")
+        cfg.write("AbstractRetrieval = %s/.pybliometrics/Scopus/abstract_retrieval\n" % config)
+        cfg.write("AffiliationSearch = %s/.pybliometrics/Scopus/affiliation_search\n" % config)
+        cfg.write("AuthorRetrieval = %s/.pybliometrics/Scopus/author_retrieval\n" % config)
+        cfg.write("AuthorSearch = %s/.pybliometrics/Scopus/author_search\n" % config)
+        cfg.write("CitationOverview = %s/.pybliometrics/Scopus/citation_overview\n" % config)
+        cfg.write("AffiliationRetrieval = %s/.pybliometrics/Scopus/affiliation_retrieval\n" % config)
+        cfg.write("ScopusSearch = %s/.pybliometrics/Scopus/scopus_search\n" % config)
+        cfg.write("SerialTitle = %s/.pybliometrics/Scopus/serial_title\n\n" % config)
+        cfg.write("[Authentication]\n")
+        cfg.write("APIKey = %s \n\n" % scopus_key)
+        cfg.write("[Request]\n")
+        cfg.write("Timeout = 20\n")
+        cfg.write("Retries = 5\n")
+    # exit()
+    from pybliometrics.scopus import CitationOverview
+
+    class MyCitationOverview(CitationOverview):
+
+        def __init__(self, identifier, servname, start=2000, end=2024,
+                     id_type='doi',
+                     apykey='b3effd27f35c5a12b039321e01d7d740'):
+            super().__init__(identifier=identifier, start=start, end=end,
+                             id_type=id_type,
+                             apykey=apykey)
+            self.start = start
+            self.end = end
+            self.servname = servname
+
+        @property
+        def cit4year(self) -> pd.DataFrame:
+            timeline_df = [[tx[1] for tx in el] for el in self.cc]
+            timeline_df = pd.DataFrame(timeline_df)
+            timeline_df.columns = range(self.start, self.end + 1)
+            timeline_df['sum'] = self.rangeCount
+            return timeline_df
+
     src = pd.read_excel(input_xlsx)
     src = src[~src['Primary doi first then others'].isna()]
-    zinput = zip(src['Service'], src['Primary doi first then others'])
-    OpenAlexServiceList = [OpenAlexService(x,y) for x,y in zinput]
-    src['OpenAlexCitations'] = [el.citations for el in OpenAlexServiceList]
-    src['OpenAlexCitationsOfCiting'] = [el.citationsOfCiting for el in OpenAlexServiceList]
-    institutions = pd.concat([el.institutions for el in OpenAlexServiceList], axis=0, ignore_index=True)
-    with pd.ExcelWriter(os.path.join(output_dir, 'ELIXIR.IT_IMPACT_OpenAlex.xlsx')) as buf:
-        src.to_excel(buf, sheet_name='summary')
-        institutions.to_excel(buf, sheet_name='institutions')
-        for df in OpenAlexServiceList:
-            aux = df.mgd_citby_year.copy()
-            aux.replace(np.nan, 0, inplace=True)
-            aux['sum'] = aux.loc[:, aux.columns[1:]].sum(axis=1)
-            aux.to_excel(buf, sheet_name=re.sub(r"[/@)(]", "_", df.service))
+    # zinput = zip(src['Service'], src['Primary doi first then others'])
+    # OpenAlexServiceList = [OpenAlexService(x,y) for x,y in zinput]
+    # src['OpenAlexCitations'] = [el.citations for el in OpenAlexServiceList]
+    # src['OpenAlexCitationsOfCiting'] = [el.citationsOfCiting for el in OpenAlexServiceList]
+    # institutions = pd.concat([el.institutions for el in OpenAlexServiceList], axis=0, ignore_index=True)
+    # with pd.ExcelWriter(os.path.join(output_dir, 'ELIXIR.IT_IMPACT_OpenAlex.xlsx')) as buf:
+    #     src.to_excel(buf, sheet_name='summary')
+    #     institutions.to_excel(buf, sheet_name='institutions')
+    #     for df in OpenAlexServiceList:
+    #         aux = df.mgd_citby_year.copy()
+    #         aux.replace(np.nan, 0, inplace=True)
+    #         aux['sum'] = aux.loc[:, aux.columns[1:]].sum(axis=1)
+    #         aux.to_excel(buf, sheet_name=re.sub(r"[/@)(]", "_", df.service))
 
     src4PyB = src.copy()
     zinput = zip(src4PyB['Service'], src4PyB['Primary doi first then others'])
