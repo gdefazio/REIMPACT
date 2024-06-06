@@ -215,19 +215,19 @@ if __name__ == '__main__':
 
     src = pd.read_excel(input_xlsx)
     src = src[~src['Primary doi first then others'].isna()]
-    # zinput = zip(src['Service'], src['Primary doi first then others'])
-    # OpenAlexServiceList = [OpenAlexService(x,y) for x,y in zinput]
-    # src['OpenAlexCitations'] = [el.citations for el in OpenAlexServiceList]
-    # src['OpenAlexCitationsOfCiting'] = [el.citationsOfCiting for el in OpenAlexServiceList]
-    # institutions = pd.concat([el.institutions for el in OpenAlexServiceList], axis=0, ignore_index=True)
-    # with pd.ExcelWriter(os.path.join(output_dir, 'ELIXIR.IT_IMPACT_OpenAlex.xlsx')) as buf:
-    #     src.to_excel(buf, sheet_name='summary')
-    #     institutions.to_excel(buf, sheet_name='institutions')
-    #     for df in OpenAlexServiceList:
-    #         aux = df.mgd_citby_year.copy()
-    #         aux.replace(np.nan, 0, inplace=True)
-    #         aux['sum'] = aux.loc[:, aux.columns[1:]].sum(axis=1)
-    #         aux.to_excel(buf, sheet_name=re.sub(r"[/@)(]", "_", df.service))
+    zinput = zip(src['Service'], src['Primary doi first then others'])
+    OpenAlexServiceList = [OpenAlexService(x,y) for x,y in zinput]
+    src['OpenAlexCitations'] = [el.citations for el in OpenAlexServiceList]
+    src['OpenAlexCitationsOfCiting'] = [el.citationsOfCiting for el in OpenAlexServiceList]
+    institutions = pd.concat([el.institutions for el in OpenAlexServiceList], axis=0, ignore_index=True)
+    with pd.ExcelWriter(os.path.join(output_dir, 'ELIXIR.IT_IMPACT_OpenAlex.xlsx')) as buf:
+        src.to_excel(buf, sheet_name='summary')
+        institutions.to_excel(buf, sheet_name='institutions')
+        for df in OpenAlexServiceList:
+            aux = df.mgd_citby_year.copy()
+            aux.replace(np.nan, 0, inplace=True)
+            aux['sum'] = aux.loc[:, aux.columns[1:]].sum(axis=1)
+            aux.to_excel(buf, sheet_name=re.sub(r"[/@)(]", "_", df.service))
 
     src4PyB = src.copy()
     zinput = zip(src4PyB['Service'], src4PyB['Primary doi first then others'])
