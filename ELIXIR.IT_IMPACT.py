@@ -24,7 +24,8 @@ def input_options():
     parser.add_argument("-i", "--input_excel", type=str,
                         help="The path to the input excel. An excel format example is provided in the GitHub page",
                         action="store", required=False,
-                        default='./Table S1-SAB-160224_lst.xlsx')
+                        default='./INPUT_TOY.xlsx')
+                        #default='./Table S1-SAB-160224_lst.xlsx')
     parser.add_argument("-o", "--output_directory", type=str,
                         help="output directory", action="store", required=False,
                         default="./")
@@ -102,45 +103,53 @@ class OpenAlexService:
     def __init__(self, service, doiString: str) -> None:
         self.service = service
         self.doiSplit = [el.strip() for el in doiString.split(',')]
-        self.openAlexList: list = [OpenAlexDoi(service, el) for el in self.doiSplit]
-        self.citations = sum([el.citations for el in self.openAlexList])
-        self.citationsOfCiting = sum([el.get_citing_works() for el in self.openAlexList])
+        self.openAlexDict: dict = {doi: OpenAlexDoi(service, doi) for doi in self.doiSplit}
+        self.citations = sum([el.citations for el in self.openAlexDict.values()])
+        self.citationsOfCiting = sum([el.get_citing_works() for el in self.openAlexDict.values()])
         self.institutions = None
         try:
-            self.institutions = pd.concat([el.get_institutions() for el in self.openAlexList], axis=0,
-                                      ignore_index=True).drop_duplicates().reset_index(drop=True)
+            self.institutions = pd.concat([el.get_institutions() for el in self.openAlexDict.values()],
+                                          axis=0,
+                                          ignore_index=True).drop_duplicates().reset_index(drop=True)
         except ValueError:
             print(service, doiString)
 
-        if self.openAlexList.__len__() > 1:
+        if self.openAlexDict.__len__() > 1:
             self.counter_in_merger = 0
-            self.mgd_citby_year = reduce(lambda x, y: self.mg_citby_year(x, y),
-                                         [el.cit_by_years for el in self.openAlexList])
+            citdf_list = list()
+            for doi, obj in self.openAlexDict.items():
+                citdf = obj.cit_by_years
+                citdf.columns = ['year', doi]
+                citdf_list.append(citdf)
+            self.mgd_citby_year = reduce(lambda x, y: x.merge(y, on='year', how='outer'), citdf_list)
         else:
-            self.mgd_citby_year = self.openAlexList[0].cit_by_years
+            key = list(self.openAlexDict.keys())[0]
+            self.mgd_citby_year = self.openAlexDict[key].cit_by_years
+            self.mgd_citby_year.columns = ['year', key]
 
         self.mgd_citby_year.fillna(0, inplace=True)
+        self.mgd_citby_year = self.mgd_citby_year.T
         # self.authors = pd.concat([el.authors for el in self.openAlexList], axis=0,
         #                               ignore_index=True)
         # self.authors.drop_duplicates().reset_index(drop=True)
         # self.auth2orcid = pd.concat([el.auth2orcid for el in self.openAlexList], axis=0,
         #                               ignore_index=True).drop_duplicates().reset_index(drop=True)
 
-    def mg_citby_year(self, obj_df1: pd.DataFrame, obj_df2: pd.DataFrame) -> pd.DataFrame:
-        if obj_df2.shape[0] != 0:
-            # obj_df1_cols = list(obj_df1.columns)
-            obj_df2_cols = list(obj_df2.columns)
-            # obj_df1_cols.pop(-1)
-            obj_df2_cols.pop(-1)
-            # obj_df1_cols.append("doi_%s" % self.counter_in_merger)
-            # self.counter_in_merger += 1
-            obj_df2_cols.append("doi_%s" % self.counter_in_merger)
-            self.counter_in_merger += 1
-            # obj_df1.columns = obj_df1_cols
-            obj_df2.columns = obj_df2_cols
-            return obj_df1.merge(obj_df2, on='year', how='outer')
-        else:
-            return obj_df1
+    # def mg_citby_year(self, obj_df1: pd.DataFrame, obj_df2: pd.DataFrame) -> pd.DataFrame:
+    #     if obj_df2.shape[0] != 0:
+    #         # obj_df1_cols = list(obj_df1.columns)
+    #         obj_df2_cols = list(obj_df2.columns)
+    #         # obj_df1_cols.pop(-1)
+    #         obj_df2_cols.pop(-1)
+    #         # obj_df1_cols.append("doi_%s" % self.counter_in_merger)
+    #         # self.counter_in_merger += 1
+    #         obj_df2_cols.append("doi_%s" % self.counter_in_merger)
+    #         self.counter_in_merger += 1
+    #         # obj_df1.columns = obj_df1_cols
+    #         obj_df2.columns = obj_df2_cols
+    #         return obj_df1.merge(obj_df2, on='year', how='outer')
+    #     else:
+    #         return obj_df1
 
 
 
@@ -187,10 +196,12 @@ if __name__ == '__main__':
         cfg.write("SerialTitle = %s/.pybliometrics/Scopus/serial_title\n\n" % config)
         cfg.write("[Authentication]\n")
         cfg.write("APIKey = %s \n\n" % scopus_key)
-        cfg.write("[Request]\n")
+        cfg.write("[Requests]\n")
         cfg.write("Timeout = 20\n")
         cfg.write("Retries = 5\n")
     # exit()
+    import pybliometrics
+    pybliometrics.scopus.init(keys=scopus_key,config_dir=cfgfile)
     from pybliometrics.scopus import CitationOverview
 
     class MyCitationOverview(CitationOverview):
@@ -216,27 +227,28 @@ if __name__ == '__main__':
     src = pd.read_excel(input_xlsx)
     src = src[~src['Primary doi first then others'].isna()]
     zinput = zip(src['Service'], src['Primary doi first then others'])
-    OpenAlexServiceList = [OpenAlexService(x,y) for x,y in zinput]
-    src['OpenAlexCitations'] = [el.citations for el in OpenAlexServiceList]
-    src['OpenAlexCitationsOfCiting'] = [el.citationsOfCiting for el in OpenAlexServiceList]
-    institutions = pd.concat([el.institutions for el in OpenAlexServiceList], axis=0, ignore_index=True)
-    with pd.ExcelWriter(os.path.join(output_dir, 'ELIXIR.IT_IMPACT_OpenAlex.xlsx')) as buf:
-        src.to_excel(buf, sheet_name='summary')
-        institutions.to_excel(buf, sheet_name='institutions')
-        for df in OpenAlexServiceList:
-            aux = df.mgd_citby_year.copy()
-            aux.replace(np.nan, 0, inplace=True)
-            aux['sum'] = aux.loc[:, aux.columns[1:]].sum(axis=1)
-            aux.to_excel(buf, sheet_name=re.sub(r"[/@)(]", "_", df.service))
-
-    src4PyB = src.copy()
-    zinput = zip(src4PyB['Service'], src4PyB['Primary doi first then others'])
-    PyBlioInstance = [MyCitationOverview(
+    OpenAlexServiceDict = {x:OpenAlexService(x,y) for x,y in zinput}
+    src['OpenAlexCitations'] = [el.citations for el in OpenAlexServiceDict.values()]
+    src['OpenAlexCitationsOfCiting'] = [el.citationsOfCiting for el in OpenAlexServiceDict.values()]
+    institutions = pd.concat([el.institutions for el in OpenAlexServiceDict.values()],
+                             axis=0, ignore_index=True)
+    zinput = zip(src['Service'], src['Primary doi first then others'])
+    PyBlioInstanceDict = {a:MyCitationOverview(
         servname=a, identifier=[el.strip() for el in b.split(',')],
         start=2000, end=2024, id_type='doi',
-        apykey=scopus_key) for a, b in zinput]
-    src4PyB['PyBlioCitations'] = [el.grandTotal for el in PyBlioInstance]
-    with pd.ExcelWriter(os.path.join(output_dir, 'ELIXIR.IT_IMPACT_PyBliometrix.xlsx')) as buf:
-        src4PyB.to_excel(buf, sheet_name='summary')
-        for inst in PyBlioInstance:
-            inst.cit4year.to_excel(buf, sheet_name=re.sub(r"[/@)(]", "_", inst.servname))
+        apykey=scopus_key) for a, b in zinput}
+    src['PyBlioCitations'] = [el.grandTotal for el in PyBlioInstanceDict.values()]
+
+    with pd.ExcelWriter(os.path.join(output_dir, 'ELIXIR.IT_IMPACT.xlsx')) as buf:
+        src.to_excel(buf, sheet_name='summary')
+        institutions.to_excel(buf, sheet_name='institutions')
+
+    dir_services=os.path.join(output_dir, "services")
+    try:
+        os.mkdir(dir_services)
+    except FileExistsError:
+        pass
+    for k, df in OpenAlexServiceDict.items():
+        aux = df.mgd_citby_year.concat(PyBlioInstanceDict[k].cit4year, axis=1)
+        aux.replace(np.nan, 0, inplace=True)
+        aux.to_csv(os.path.join(dir_services, re.sub(r"[/@)(]", "_", k)))
