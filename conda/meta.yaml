@@ -23,7 +23,7 @@ requirements:
   run:
     - python >=3.7
     - pyalex ==0.14
-      pybliometrics ==4.0
+    - pybliometrics ==4.0
 
 test:
   command:
