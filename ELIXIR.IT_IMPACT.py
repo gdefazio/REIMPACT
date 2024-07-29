@@ -1,6 +1,6 @@
 import os.path
 import sys
-
+from datetime import datetime as dt
 import pybliometrics.scopus
 # from pybliometrics.scopus.utils import create_config
 from pybliometrics.scopus import CitationOverview
@@ -31,7 +31,7 @@ def input_options():
                         #default='./Table S1-SAB-160224_lst.xlsx')
     parser.add_argument("-o", "--output_directory", type=str,
                         help="output directory", action="store", required=False,
-                        default="./")
+                        default="./ELIXIR_IT_IMPACT")
     parser.add_argument("-a", "--openalex_key", type=str,
                         help="the OpenAlex API key to query",
                         action="store", required=False,
@@ -234,6 +234,14 @@ class MyCitationOverview(CitationOverview):
         timeline_df['provider'] = 'Scopus'
         return timeline_df
 
+
+def return_time(message: str = None):
+    t = dt.now()
+    s = str(t).split('.')[0]
+    if message is None:
+        print("[%s] Return time: e' l'ora dei teletubbies" % s)
+    else:
+        print("[%s] %s" % (s, message))
 #
 # def queryScopus(doi):
 #     url = ("http://api.elsevier.com/content/search/scopus?query=doi(%s)" % doi)
@@ -254,6 +262,14 @@ class MyCitationOverview(CitationOverview):
 
 
 if __name__ == '__main__':
+    print("""
+    ################################################################################################
+    #                                                                                              #
+    #      CITATION OVERVIEW SYSTEM FOR BIBLIOMETRIC ASSESSMENT RELYING ON OPENALEX AND SCOPUS     #
+    #                                    POWERED BY ELIXIR-IIB                                     #
+    #                                                                                              #
+    ################################################################################################
+    """)
     pybliometrics.scopus.create_config(keys=['b3effd27f35c5a12b039321e01d7d740'])
     options = input_options()
 
@@ -286,38 +302,50 @@ if __name__ == '__main__':
     # print(pybliometrics.scopus.CONFIG_FILE)
     # pybliometrics.scopus.init(keys=scopus_key,config_dir=cfgfile)
     #
-
+    print("""
+    Input excel file: %s
+    Output directory: %s
+    Openalex key: %s
+    Scopus key: %s
+    ______________________________________________________________________________________
+    """)
 
     src = pd.read_excel(input_xlsx)
     src = src[~src['Primary doi first then others'].isna()]
     zinput = zip(src['Service'],src['Platform'], src['Primary doi first then others'])
+    return_time('Starting OpenAlex information retrieval...')
     OpenAlexServiceDict = {x:OpenAlexService(x,y,z) for x,y,z in zinput}
+    return_time('Starting OpenAlex citations data elaboration...')
     src['OpenAlexCitations'] = [el.citations for el in OpenAlexServiceDict.values()]
+    return_time('Starting OpenAlex impact data elaboration...')
     src['OpenAlexCitationsOfCiting'] = [el.citationsOfCiting for el in OpenAlexServiceDict.values()]
     institutions = pd.concat([el.institutions for el in OpenAlexServiceDict.values()],
                              axis=0, ignore_index=True)
     institutionsOfCitings = pd.concat([el.institutionsOfCiting for el in OpenAlexServiceDict.values()],axis=0)
     zinput = zip(src['Service'], src['Primary doi first then others'])
+    return_time('Starting Starting Scopus information retrieval...')
     pybliometrics.scopus.init()
     PyBlioInstanceDict = {a:MyCitationOverview(
         servname=a, identifier=[el.strip() for el in b.split(',')],
         start=2000, end=2024, id_type='doi',
         apykey=scopus_key) for a, b in zinput}
     src['PyBlioCitations'] = [el.grandTotal for el in PyBlioInstanceDict.values()]
-
+    return_time('Starting overall data storage')
     with pd.ExcelWriter(os.path.join(output_dir, 'ELIXIR.IT_IMPACT.xlsx')) as buf:
         src.to_excel(buf, sheet_name='summary')
         institutions.to_excel(buf, sheet_name='institutions')
         institutionsOfCitings.to_excel(buf, sheet_name='institutionsOfCitings')
-
+    return_time('Starting service-specific data storage...')
     dir_services=os.path.join(output_dir, "services")
     try:
         os.mkdir(dir_services)
     except FileExistsError:
         pass
     for k, df in OpenAlexServiceDict.items():
+        return_time(k)
         # print(df.mgd_citby_year)
         # print(PyBlioInstanceDict[k].cit4year)
         aux = pd.concat([PyBlioInstanceDict[k].cit4year, df.mgd_citby_year], axis=0)
         aux.replace(np.nan, 0, inplace=True)
         aux.to_csv(os.path.join(dir_services, re.sub(r"[/@)(]", "_", k)))
+return_time('Finished...Good bye')
