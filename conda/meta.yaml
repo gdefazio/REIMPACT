@@ -1,0 +1,30 @@
+package:
+  name: ELIXIR-IIB_IMPACT
+  version: "1.0"
+
+source:
+  path: /Users/giuseppedefazio/Documents/RTDA_UniBA/progetti/ELIXIR_citations
+
+build:
+  script: python /home/giuseppedefazio/Documenti/kMetaShot_HQ_paper/kMetaShot_github/kMetaShot/conda_recipes/setup.py install
+  number: 0
+  build: beta
+  preserve_egg_dir: True
+
+channels:
+  - conda-forge
+
+requirements:
+  host:
+    - python >=3.7
+    - pip
+    - setuptools
+
+  run:
+    - python >=3.7
+    - pyalex ==0.14
+      pybliometrics ==4.0
+
+test:
+  command:
+    - ELIXIR.IT_IMPACT.py --help
