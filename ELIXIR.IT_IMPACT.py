@@ -27,7 +27,7 @@ def input_options():
     parser.add_argument("-i", "--input_excel", type=str,
                         help="The path to the input excel. An excel format example is provided in the GitHub page",
                         action="store", required=False,
-                        default='./INPUT_TOY.xlsx')
+                        default='./ELIXIR.IT_IMPACT.xlsx')
                         #default='./Table S1-SAB-160224_lst.xlsx')
     parser.add_argument("-o", "--output_directory", type=str,
                         help="output directory", action="store", required=False,
