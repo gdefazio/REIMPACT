@@ -345,7 +345,7 @@ if __name__ == '__main__':
         start=2000, end=2024, id_type='doi',
         apykey=scopus_key) for a, b in zinput}
     src['PyBlioCitations'] = [el.grandTotal for el in PyBlioInstanceDict.values()]
-    return_time('Starting overall data storage')
+    return_time('Starting overall data storage...')
     try:
         os.mkdir(output_dir)
     except FileExistsError:
