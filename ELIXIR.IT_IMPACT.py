@@ -1,3 +1,8 @@
+#!/usr/env/bin python3
+__author__ = "Giuseppe Defazio"
+__version__ = "1.0"
+
+
 import os.path
 import sys
 from datetime import datetime as dt
@@ -27,11 +32,10 @@ def input_options():
     parser.add_argument("-i", "--input_excel", type=str,
                         help="The path to the input excel. An excel format example is provided in the GitHub page",
                         action="store", required=False,
-                        default='./ELIXIR.IT_IMPACT.xlsx')
-                        #default='./Table S1-SAB-160224_lst.xlsx')
+                        default='./Table S1-SAB-160224_lst.xlsx')
     parser.add_argument("-o", "--output_directory", type=str,
                         help="output directory", action="store", required=False,
-                        default="./ELIXIR_IT_IMPACT")
+                        default="./try_30_07")
     parser.add_argument("-a", "--openalex_key", type=str,
                         help="the OpenAlex API key to query",
                         action="store", required=False,
@@ -61,8 +65,11 @@ class OpenAlexDoi:
         melt_info = list()
         for i in range(0, self.authors.shape[0]):
             if self.authors.loc[i, 'raw_affiliation_strings'].__len__() != 0:
-                melt_info.append((self.authors.loc[i, 'institutions'][-1]['display_name'],
-                                  self.authors.loc[i, 'institutions'][-1]['country_code']))
+                try:
+                    melt_info.append((self.authors.loc[i, 'institutions'][-1]['display_name'],
+                                      self.authors.loc[i, 'institutions'][-1]['country_code']))
+                except IndexError:
+                    pass
                 # df = pd.DataFrame(
                 #     self.authors.loc[i, 'institutions'])[[
                 #     'display_name', 'country_code', 'type']]
@@ -86,8 +93,11 @@ class OpenAlexDoi:
         if self.citations <= 200:
             ans = requests.get(self.object['cited_by_api_url'])
             j_ans = json.loads(ans.text.encode('utf-8'))
-            try:
-                df = pd.DataFrame(j_ans['results'])
+            #try:
+            df = pd.DataFrame(j_ans['results'])
+            if df.shape[0] == 0:
+                return None, None
+            else:
                 # authorship contiene le info sugli autori dei lavori che citano i lavori
                 # di elixiri
                 c = 0
@@ -111,8 +121,8 @@ class OpenAlexDoi:
                         c += 1
                 citing_institutions.drop_duplicates(inplace=True)
                 return df['cited_by_count'].sum(), citing_institutions
-            except KeyError:
-                return 0
+            #except KeyError:
+            #    return 0
         else:
             ans = requests.get("%s&page=1&per-page=200" % self.object['cited_by_api_url'])
             j_ans = json.loads(ans.text.encode('utf-8'))
@@ -131,8 +141,12 @@ class OpenAlexDoi:
             citing_institutions = pd.DataFrame()
             # print(df.columns)
             for i in df.index:
-                el = df.loc[i, 'authorships'].values[0]
-                doiOfIter = df.loc[i, 'doi'].values[0]
+                try:
+                    el = df.loc[i, 'authorships'].values[0]
+                    doiOfIter = df.loc[i, 'doi'].values[0]
+                except AttributeError:
+                    el = df.loc[i, 'authorships']
+                    doiOfIter = df.loc[i, 'doi']
                 for dict_outhor in el:
                     citing_institutions.loc[c, 'service'] = self.service
                     citing_institutions.loc[c, 'platform'] = self.plaftorm
@@ -159,8 +173,8 @@ class OpenAlexService:
         self.openAlexDict: dict = {doi: OpenAlexDoi(service, platform, doi) for doi in self.doiSplit}
         self.citations = sum([el.citations for el in self.openAlexDict.values()])
         OfCiting = [el.get_citing_works() for el in self.openAlexDict.values()]
-        self.citationsOfCiting = sum([el[0] for el in OfCiting])
-        self.institutionsOfCiting = pd.concat([el[1] for el in OfCiting], axis=0)
+        self.citationsOfCiting = sum([el[0] for el in OfCiting if el[0] is not None])
+        self.institutionsOfCiting = pd.concat([el[1] for el in OfCiting if el[1] is not None], axis=0)
         del OfCiting
         self.institutions = None
         try:
@@ -175,8 +189,9 @@ class OpenAlexService:
             citdf_list = list()
             for doi, obj in self.openAlexDict.items():
                 citdf = obj.cit_by_years
-                citdf.columns = ['year', doi]
-                citdf_list.append(citdf)
+                if citdf.shape[0] > 0:
+                    citdf.columns = ['year', doi]
+                    citdf_list.append(citdf)
             self.mgd_citby_year = reduce(lambda x, y: x.merge(y, on='year', how='outer'), citdf_list)
 
         else:
@@ -308,7 +323,7 @@ if __name__ == '__main__':
     Openalex key: %s
     Scopus key: %s
     ______________________________________________________________________________________
-    """)
+    """ % (input_xlsx, output_dir, alex_key, scopus_key))
 
     src = pd.read_excel(input_xlsx)
     src = src[~src['Primary doi first then others'].isna()]
@@ -331,6 +346,11 @@ if __name__ == '__main__':
         apykey=scopus_key) for a, b in zinput}
     src['PyBlioCitations'] = [el.grandTotal for el in PyBlioInstanceDict.values()]
     return_time('Starting overall data storage')
+    try:
+        os.mkdir(output_dir)
+    except FileExistsError:
+        pass
+
     with pd.ExcelWriter(os.path.join(output_dir, 'ELIXIR.IT_IMPACT.xlsx')) as buf:
         src.to_excel(buf, sheet_name='summary')
         institutions.to_excel(buf, sheet_name='institutions')

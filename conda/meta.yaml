@@ -6,24 +6,27 @@ source:
   path: /Users/giuseppedefazio/Documents/RTDA_UniBA/progetti/ELIXIR_citations
 
 build:
-  script: python /home/giuseppedefazio/Documenti/kMetaShot_HQ_paper/kMetaShot_github/kMetaShot/conda_recipes/setup.py install
-  number: 0
-  build: beta
-  preserve_egg_dir: True
+  #script: python /Users/giuseppedefazio/Documents/RTDA_UniBA/progetti/ELIXIR_citations/conda/setup.py install
+  script:
+    - python -m pip install --user -U -i https://pypi.org/project -r requirements.txt -vvv
+    #- python -m pip install -i https://pypi.org/project pyalex -vvv
+    - python -m pip install .  #/Users/giuseppedefazio/Documents/RTDA_UniBA/progetti/ELIXIR_citations/conda/setup.py
 
 channels:
   - conda-forge
+  - bioconda
 
 requirements:
   host:
-    - python >=3.7
+    - python >=3.8
     - pip
-    - setuptools
+    - build
 
   run:
-    - python >=3.7
-    - pyalex ==0.14
-    - pybliometrics ==4.0
+    - python >=3.8
+    - pip
+    - argcomplete
+    - pandas
 
 test:
   command:
