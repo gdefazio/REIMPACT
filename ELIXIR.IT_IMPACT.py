@@ -7,10 +7,7 @@ import os.path
 import sys
 from datetime import datetime as dt
 import pybliometrics.scopus
-# from pybliometrics.scopus.utils import create_config
 from pybliometrics.scopus import CitationOverview
-# pybliometrics.scopus.init(keys=['b3effd27f35c5a12b039321e01d7d740'])
-# from itertools import combinations
 from functools import reduce
 import pandas as pd
 import numpy as np
@@ -21,29 +18,23 @@ import pyalex
 import json
 import re
 
-# '10.1093/nar/gkr930, 10.1093/nar/gkt1115, 10.1093/nar/gkp983, 10.1093/nar/gkl950, 10.1016/s0014-5793(01)03293-8, 10.1002/cpbi.93, 10.1002/cpbi.93'
-# MY_API_KEY = '8fc3c1e2aaaf954888ae7cba80324151'
-
-
 def input_options():
     parser = argparse.ArgumentParser(
         description="This script interrogates OpenAlex and Scopus Api to obtain bibliometric features of papers related to ELIXIR IT services",
         prefix_chars="-")
     parser.add_argument("-i", "--input_excel", type=str,
                         help="The path to the input excel. An excel format example is provided in the GitHub page",
-                        action="store", required=False,
-                        default='./Table S1-SAB-160224_lst.xlsx')
+                        action="store", required=True)
+                        # default='./Table S1-SAB-160224_lst.xlsx'
     parser.add_argument("-o", "--output_directory", type=str,
                         help="output directory", action="store", required=False,
-                        default="./try_30_07")
+                        default="./ELIXIR-IIB_impact")
     parser.add_argument("-a", "--openalex_key", type=str,
                         help="the OpenAlex API key to query",
-                        action="store", required=False,
-                        default='8fc3c1e2aaaf954888ae7cba80324151')
-    parser.add_argument("-p", "--pybliometrix_key", type=str,
-                        help="the OpenAlex API key to query",
-                        action="store", required=False,
-                        default='b3effd27f35c5a12b039321e01d7d740')
+                        action="store", required=True)
+    parser.add_argument("-p", "--pybliometrics_key", type=str,
+                        help="the Pybliometrics API key to query",
+                        action="store", required=True)
 
     argcomplete.autocomplete(parser)
     return parser.parse_args()
@@ -228,9 +219,10 @@ class OpenAlexService:
 
 class MyCitationOverview(CitationOverview):
 
-    def __init__(self, identifier, servname, start=2000, end=2024,
-                 id_type='doi',
-                 apykey='b3effd27f35c5a12b039321e01d7d740'):
+    def __init__(self, identifier, servname, apykey,
+                 start=dt.now().timetuple()[0]-20,
+                 end=dt.now().timetuple()[0],
+                 id_type='doi'):
         super().__init__(identifier=identifier, start=start, end=end,
                          id_type=id_type,
                          apykey=apykey)
@@ -285,11 +277,13 @@ if __name__ == '__main__':
     #                                                                                              #
     ################################################################################################
     """)
-    pybliometrics.scopus.create_config(keys=['b3effd27f35c5a12b039321e01d7d740'])
+
     options = input_options()
 
     input_xlsx, output_dir, alex_key, scopus_key = options.input_excel, options.output_directory, \
-        options.openalex_key, options.pybliometrix_key
+        options.openalex_key, options.pybliometrics_key
+    pybliometrics.scopus.create_config(keys=[scopus_key])
+    pybliometrics.scopus.init()
     # home = os.environ['HOME']
     # config = os.path.join(home, '.config')
     # cfgfile = os.path.join(home, '.config', 'pybliometrics.cfg')
@@ -339,10 +333,11 @@ if __name__ == '__main__':
     institutionsOfCitings = pd.concat([el.institutionsOfCiting for el in OpenAlexServiceDict.values()],axis=0)
     zinput = zip(src['Service'], src['Primary doi first then others'])
     return_time('Starting Starting Scopus information retrieval...')
-    pybliometrics.scopus.init()
+
     PyBlioInstanceDict = {a:MyCitationOverview(
         servname=a, identifier=[el.strip() for el in b.split(',')],
-        start=2000, end=2024, id_type='doi',
+        start=dt.now().timetuple()[0]-20,
+        end=dt.now().timetuple()[0], id_type='doi',
         apykey=scopus_key) for a, b in zinput}
     src['PyBlioCitations'] = [el.grandTotal for el in PyBlioInstanceDict.values()]
     return_time('Starting overall data storage...')
