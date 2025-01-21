@@ -104,8 +104,8 @@ class OpenAlexDoi:
                         citing_institutions.loc[c, 'doiOfCiting'] = doiOfIter
                         # citing_institutions.loc[c, 'author'] = dict_outhor['author']['display_name']
                         if len(dict_outhor['institutions']) == 0:
-                            citing_institutions.loc[c, 'institution'] = np.NAN
-                            citing_institutions.loc[c, 'country'] = np.NAN
+                            citing_institutions.loc[c, 'institution'] = np.nan
+                            citing_institutions.loc[c, 'country'] = np.nan
                         else:
                             citing_institutions.loc[c, 'institution'] = dict_outhor['institutions'][0]['display_name']
                             citing_institutions.loc[c, 'country'] = dict_outhor['institutions'][0]['country_code']
@@ -145,8 +145,8 @@ class OpenAlexDoi:
                     citing_institutions.loc[c, 'doiOfCiting'] = doiOfIter
                     # citing_institutions.loc[c, 'author'] = dict_outhor['author']['display_name']
                     if len(dict_outhor['institutions']) == 0:
-                        citing_institutions.loc[c, 'institution'] = np.NAN
-                        citing_institutions.loc[c, 'country'] = np.NAN
+                        citing_institutions.loc[c, 'institution'] = np.nan
+                        citing_institutions.loc[c, 'country'] = np.nan
                     else:
                         citing_institutions.loc[c, 'institution'] = dict_outhor['institutions'][0]['display_name']
                         citing_institutions.loc[c, 'country'] = dict_outhor['institutions'][0]['country_code']
