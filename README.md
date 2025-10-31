@@ -27,7 +27,7 @@ System for bibliometric assessment of ELIXIR services and authors, based on Open
 1. **Author DOI Search**
    ```bash
    python source/AuthorAsService.py \
-     --authors_file test/authors_template.xlsx \
+     --input_authors test/authors_template.xlsx \
      --openalex_mailto your.email@domain.com \
      --scopus_key YOUR_SCOPUS_KEY
    ```
@@ -35,8 +35,9 @@ System for bibliometric assessment of ELIXIR services and authors, based on Open
 2. **Impact Assessment via DOI**
    ```bash
    python source/DOI2impact.py \
-     -i test/Authors_DOIs_OpenAlex.xlsx \
-     -o output_impact/ 
+     -i authors_results/Authors_DOIs_OpenAlex.xlsx \
+     --openalex_mailto your.email@domain.com \
+     --scopus_key YOUR_SCOPUS_KEY
    ```
 
 ---
