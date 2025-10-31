@@ -125,7 +125,7 @@ Examples:
     if not args.openalex_key and not args.openalex_mailto:
         parser.error("You must provide either an OpenAlex API key (-a) or an email (-m) for polite pool access.")
     if not args.skip_scopus and not args.scopus_key:
-        parser.error("Pybliometrics API key (-p) is required unless --skip_scopus is specified.")
+        parser.error("Pybliometrics API key (-s) is required unless --skip_scopus is specified.")
 
     return args
 
