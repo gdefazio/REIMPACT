@@ -141,7 +141,7 @@ def choose_search_databases(skip_scopus_flag: bool) -> dict:
         # print("Scopus search will be skipped (--skip_scopus set). Using only OpenAlex.")
         return {'openalex': True, 'scopus': False}
     print("\n==============================")
-    print("     🗃️  DATABASE SELECTION")
+    print("    🗃️  DATABASE SELECTION")
     print("==============================")
     print("Where do you want to search for citations?")
     print("  [1] OpenAlex only")
@@ -390,9 +390,11 @@ def main():
 ''')    
 
     # Configuration
-    print('''\n==============================
-    ⚙️  CONFIGURATION SUMMARY
-==============================''')
+    print('''\n
+==============================
+  ⚙️  CONFIGURATION SUMMARY
+==============================
+          ''')
     if args.openalex_key:
         pyalex.config.api_key = args.openalex_key
         logger.info("✅ OpenAlex: API key (100k requests/day)")
@@ -434,15 +436,16 @@ def main():
     # Prompt for database selection
     search_config = choose_search_databases(args.skip_scopus)
 
+
     # OpenAlex processing
     zinput = zip(src['Service'], src['Platform'], src['Primary doi first then others'])
     if search_config['openalex']:
         logger.info('\n🔍Starting OpenAlex information retrieval...')
         OpenAlexServiceDict = {x: OpenAlexService(x, y, z) for x, y, z in zinput}
         logger.info('\n🔍   Starting OpenAlex citations data elaboration...')
-        src['OpenAlexCitations'] = [el.citations for el in OpenAlexServiceDict.values()]
+        src['OpenAlexCitations'] = src['Service'].map(lambda s: OpenAlexServiceDict[s].citations if s in OpenAlexServiceDict else np.nan)
         logger.info('\n🔍   Starting OpenAlex impact data elaboration...')
-        src['OpenAlexCitationsOfCiting'] = [el.citationsOfCiting for el in OpenAlexServiceDict.values()]
+        src['OpenAlexCitationsOfCiting'] = src['Service'].map(lambda s: OpenAlexServiceDict[s].citationsOfCiting if s in OpenAlexServiceDict else np.nan)
         institutions = pd.concat([el.institutions for el in OpenAlexServiceDict.values() if el.institutions is not None], axis=0, ignore_index=True)
         institutionsOfCitings = pd.concat([el.institutionsOfCiting for el in OpenAlexServiceDict.values() if el.institutionsOfCiting is not None], axis=0)
     else:
@@ -452,12 +455,12 @@ def main():
         institutions = pd.DataFrame()
         institutionsOfCitings = pd.DataFrame()
 
+    # Scopus processing
     zinput = zip(src['Service'], src['Primary doi first then others'])
     scopus_failed = False
     if search_config['scopus']:
         logger.info('\n🔍   Starting Scopus information retrieval...')
         PyBlioInstanceDict = {}
-        pyblio_citations = []
         _scopus_start = dt.now().timetuple()[0] - 20
         _scopus_end = dt.now().timetuple()[0]
         try:
@@ -473,12 +476,11 @@ def main():
                         apykey=args.scopus_key,
                     )
                     PyBlioInstanceDict[a] = inst
-                    pyblio_citations.append(inst.grandTotal)
                 except Exception as exc:
                     logger.warning(f"Scopus retrieval failed for service '{a}': {exc}")
                     PyBlioInstanceDict[a] = None
-                    pyblio_citations.append(np.nan)
-            src['PyBlioCitations'] = pyblio_citations
+            # Allinea la colonna ai servizi
+            src['PyBlioCitations'] = src['Service'].map(lambda s: PyBlioInstanceDict[s].grandTotal if s in PyBlioInstanceDict and PyBlioInstanceDict[s] is not None else np.nan)
         except Exception as exc:
             logger.error(f"Scopus block failed: {exc}. Will save only OpenAlex results.")
             scopus_failed = True
