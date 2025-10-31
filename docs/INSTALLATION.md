@@ -69,7 +69,7 @@ After obtaining your API key, you **must request authorization** from Elsevier D
 ```bash
 export SCOPUS_API_KEY="your_scopus_key"
 ```
-See [SCOAPI_SETUP](API_SETUP.md) for detailed instructions.
+See [API_SETUP](API_SETUP.md) for detailed instructions.
 
 ---
 
