@@ -389,9 +389,9 @@ def main():
 ################################################################################################
 ''')    
 
-    # OpenAlex configuration
+    # Configuration
     print('''\n==============================
-      ⚙️  Configuration
+    ⚙️  CONFIGURATION SUMMARY
 ==============================''')
     if args.openalex_key:
         pyalex.config.api_key = args.openalex_key

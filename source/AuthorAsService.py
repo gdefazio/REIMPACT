@@ -892,21 +892,23 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
 
     # OpenAlex configuration
-    print("  📡 API Configuration:")
+    print('''\n==============================
+       📡 API Configuration
+==============================''')
     if alex_key:
         pyalex.config.api_key = alex_key
-        print("     ✅ OpenAlex: API key (100k requests/day)")
+        print("✅   OpenAlex: API key (100k requests/day)")
     else:
-        print("     ✅ OpenAlex: Polite pool (10 req/s)")
+        print("✅   OpenAlex: Polite pool (10 req/s)")
     
     if mailto:
         pyalex.config.mailto = mailto
-        print(f"     📧 Contact: {mailto}")
+        print(f"📧  Mail: {mailto}")
     else:
-        print("     ⚠️  No mailto provided")
+        print("⚠️   No mailto provided")
         if not alex_key:
-            print("     ❌ ERROR: Need API key OR mailto for OpenAlex")
-            print("     💡 Set OPENALEX_API_KEY or OPENALEX_MAILTO environment variable\n")
+            print("❌   Need API key OR mailto for OpenAlex")
+            print("💡   Set OPENALEX_API_KEY or OPENALEX_MAILTO environment variable\n")
             return 1
 
     # Scopus configuration
@@ -914,10 +916,10 @@ def main():
         try:
             pybliometrics.scopus.create_config(keys=[scopus_key]) # type: ignore
             pybliometrics.scopus.init() # type: ignore
-            print("     ✅ Scopus: API key configured")
+            print("✅   Scopus: API key configured")
         except Exception as exc:
-            print(f"     ❌ Scopus configuration failed: {exc}")
-    
+            print(f"❌   Scopus configuration failed: {exc}")
+
     print("")  # Empty line after configuration
     
     # Prepare list of authors
