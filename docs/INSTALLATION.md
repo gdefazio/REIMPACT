@@ -10,7 +10,7 @@
 ```bash
 cd ELIXIR.IT_IMPACT
 conda env create -f environment.yml
-conda activate impact_author
+conda activate elixir_impact
 ```
 
 ### Option 2: Manual Setup
