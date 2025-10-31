@@ -64,12 +64,12 @@ After obtaining your API key, you **must request authorization** from Elsevier D
 - ScopusSearch
 - AuthorRetrieval
 
-See [SCOPUS_API_SETUP.md](SCOPUS_API_SETUP.md) for detailed instructions.
 
 #### Step 3: Configure API Key
 ```bash
 export SCOPUS_API_KEY="your_scopus_key"
 ```
+See [SCOAPI_SETUP](API_SETUP.md) for detailed instructions.
 
 ---
 
