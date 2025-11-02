@@ -30,6 +30,11 @@ except ImportError:
     ARGCOMPLETE_AVAILABLE = False
 
 # =============================
+# MODULE LOGGER
+# =============================
+logger = logging.getLogger(__name__)
+
+# =============================
 # ARGUMENT PARSING
 # =============================
 def parse_arguments() -> argparse.Namespace:
@@ -320,7 +325,7 @@ class MyCitationOverviewChunked:
                 self._instances.append(inst)
             except Exception as e:
                 error_name = type(e).__name__
-                logging.getLogger(__name__).debug(f"Chunk {i//25 + 1} failed with error: {error_name}: {e}")
+                logger.debug(f"Chunk {i//25 + 1} failed with error: {error_name}: {e}")
                 # Try DOIs individually to identify problematic ones
                 for doi in chunk:
                     try:
@@ -334,7 +339,7 @@ class MyCitationOverviewChunked:
                         )
                         self._instances.append(inst)
                     except Exception as doi_error:
-                        logging.getLogger(__name__).debug(f"DOI {doi}: Not found in Scopus - {type(doi_error).__name__}")
+                        logger.debug(f"DOI {doi}: Not found in Scopus - {type(doi_error).__name__}")
                         # Continue without this DOI
     @property
     def grandTotal(self) -> int:
@@ -354,7 +359,6 @@ def main():
     try:
         args = parse_arguments()
         setup_logging(verbose=args.verbose, log_file=args.log_file)
-        logger = logging.getLogger(__name__)
 
         # Validate inputs
         try:
@@ -503,10 +507,23 @@ def main():
     for k, df in OpenAlexServiceDict.items():
         logger.info(f"Processing {k}")
         if not scopus_failed and search_config['scopus'] and k in PyBlioInstanceDict:
-            aux = pd.concat([PyBlioInstanceDict[k].cit4year, df.mgd_citby_year], axis=0)
+            # Filter out empty DataFrames before concatenation
+            dfs_to_concat = []
+            scopus_df = PyBlioInstanceDict[k].cit4year
+            if not scopus_df.empty:
+                dfs_to_concat.append(scopus_df)
+            if not df.mgd_citby_year.empty:
+                dfs_to_concat.append(df.mgd_citby_year)
+            
+            if dfs_to_concat:
+                aux = pd.concat(dfs_to_concat, axis=0)
+            else:
+                aux = pd.DataFrame()
         else:
             aux = df.mgd_citby_year
-        aux.replace(np.nan, 0, inplace=True)
+        
+        # Replace NaN with 0 and explicitly infer types
+        aux = aux.replace(np.nan, 0).infer_objects(copy=False)
         aux.to_csv(os.path.join(dir_services, re.sub(r"[/@)(]", "_", k) + ".csv"))
     logger.info('\nFinished...Good bye 👋')
 
