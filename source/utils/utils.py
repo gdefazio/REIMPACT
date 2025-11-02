@@ -5,6 +5,8 @@ import pandas as pd
 import sys
 from typing import Optional
 
+logger = logging.getLogger(__name__)
+
 class ValidationError(Exception):
     pass
 
