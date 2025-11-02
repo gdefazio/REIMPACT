@@ -15,8 +15,8 @@ conda activate elixir_impact
 
 ### Option 2: Manual Setup
 ```bash
-conda create -n impact_author python=3.11 -y
-conda activate impact_author
+conda create -n elixir_impact python=3.11 -y
+conda activate elixir_impact
 conda install -c gdefazio pybliometrics -y   # CRITICAL: must use gdefazio channel
 cd ELIXIR.IT_IMPACT
 pip install -r requirements.txt
