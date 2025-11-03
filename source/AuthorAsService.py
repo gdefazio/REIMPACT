@@ -922,13 +922,16 @@ def main():
             return 1
 
     # Scopus configuration
-    if scopus_key:
+    if skip_scopus_author:
+        logger.info("⏭️  Scopus search will be skipped (--skip_scopus set). Using only OpenAlex.")
+    elif scopus_key:
         try:
+            logger.info("⚙️ Scopus: Configuring API key...")
             pybliometrics.scopus.create_config(keys=[scopus_key]) # type: ignore
             pybliometrics.scopus.init() # type: ignore
-            print("✅  Scopus: API key configured")
+            logger.info("✅ Scopus: API key configured")
         except Exception as exc:
-            print(f"❌  Scopus configuration failed: {exc}")
+            logger.error(f"❌ Scopus configuration failed: {exc}") 
 
     print("")  # Empty line after configuration
     
