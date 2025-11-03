@@ -37,7 +37,7 @@ conda env create -f environment.yml
 conda activate elixir_impact
 
 # Install the package
-pip install -e .
+pip install .
 ```
 
 See [INSTALLATION](docs/INSTALLATION.md) for detailed instructions.

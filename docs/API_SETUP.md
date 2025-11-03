@@ -250,7 +250,7 @@ export SCOPUS_API_KEY="your_api_key_here"
 Use the provided utility script:
 
 ```bash
-python utils/check_scopus_quota.py YOUR_API_KEY
+python source/utils/check_scopus_quota.py YOUR_API_KEY
 ```
 
 **Expected Output**:
