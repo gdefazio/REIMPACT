@@ -157,7 +157,8 @@ ELIXIR.IT_IMPACT/
 │   ├── DOI2impact.py            # Impact assessment module
 │   └── utils/
 │       ├── __init__.py
-│       └── utils.py             # Validation and logging utilities
+│       └── utils.py               # Validation and logging utilities
+│       └── check_scopus_quota.py  # Scopus quota checking utility
 ├── test/                        # Sample input files
 ├── docs/                        # Documentation
 ├── setup.py                     # Package configuration
