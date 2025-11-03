@@ -39,6 +39,11 @@ try:
 except ImportError:
     ARGCOMPLETE_AVAILABLE = False
 
+# ============================================================================
+# MODULE LOGGER
+# ============================================================================
+logger = logging.getLogger(__name__)
+
 # Export control for package integration
 __all__ = [
     'OpenAlexAuthorSearch',
@@ -1055,6 +1060,5 @@ if __name__ == '__main__':
         print("\n\n⚠️  Operation cancelled by user\n")
         sys.exit(130)  # Standard exit code for SIGINT
     except Exception as exc:
-        # logger.exception("Unexpected error:")
         print(f"\n❌ Fatal error: {exc}\n")
         sys.exit(1)
