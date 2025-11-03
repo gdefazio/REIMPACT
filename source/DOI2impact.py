@@ -545,7 +545,7 @@ def main():
             aux = pd.concat([PyBlioInstanceDict[k].cit4year, df.mgd_citby_year], axis=0)
         else:
             aux = df.mgd_citby_year
-        aux.replace(np.nan, 0, inplace=True)
+        aux.fillna(0, inplace=True)
         aux.to_csv(os.path.join(dir_services, re.sub(r"[/@)(]", "_", k) + ".csv"))
     logger.info('\n✅ Finished...Good bye 👋')
 

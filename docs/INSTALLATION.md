@@ -131,32 +131,17 @@ elixir-author-search --openalex_key YOUR_KEY --openalex_mailto your.email@domain
 
 ### Scopus API
 
-**⚠️ Important: Requires API Key + Authorization**
-
-#### Step 1: Obtain API Key
-1. Visit https://dev.elsevier.com/apikey/manage
-2. Register or log in with institutional credentials
-3. Accept terms and conditions
-4. Generate your API key
-
-#### Step 2: Request API Access Authorization
-After obtaining your API key, you **must request authorization** from Elsevier Data Support for the following APIs used by the package:
-- AuthorSearch
-- AbstractRetrieval
-- ScopusSearch
-- AuthorRetrieval
-
-
-#### Step 3: Configure API Key
+#### Configure API Key
 ```bash
 export SCOPUS_API_KEY="your_scopus_key"
 ```
 
 Or pass as command-line argument:
 ```bash
-elixir-author-search --scopus_key YOUR_SCOPUS_KEY
+elixir-author-search --scopus_key YOUR_SCOPUS_KEY 
 ```
 
+**⚠️ Important: Requires API Key + Authorization**
 See [API_SETUP](API_SETUP.md) for detailed instructions.
 
 ---
@@ -240,7 +225,7 @@ cd ELIXIR.IT_IMPACT
 git pull origin main
 
 # Reinstall package
-pip install -e . --upgrade
+pip install . --upgrade
 ```
 
 ---
@@ -299,27 +284,6 @@ elixir-author-search -a "Author" -m email@domain.com --skip_scopus
 
 ---
 
-## Development Installation
-
-For contributors who want to modify the code:
-
-```bash
-# Clone the repository
-git clone https://github.com/gdefazio/ELIXIR.IT_IMPACT.git
-cd ELIXIR.IT_IMPACT
-
-# Create environment
-conda env create -f environment.yml
-conda activate elixir_impact
-
-# Install in editable mode with development dependencies
-pip install -e ".[dev]"
-
-# Run tests (if available)
-pytest test/
-```
-
----
 
 ## System Requirements
 
