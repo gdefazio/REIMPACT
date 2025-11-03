@@ -21,13 +21,18 @@ import numpy as np
 import argparse
 import requests
 from collections import deque
-from utils.utils import setup_logging, validate_email, validate_file, validate_output_directory, validate_api_key, ValidationError
+from .utils.utils import setup_logging, validate_email, validate_file, validate_output_directory, validate_api_key, ValidationError
 # Optional dependency
 try:
     import argcomplete
     ARGCOMPLETE_AVAILABLE = True
 except ImportError:
     ARGCOMPLETE_AVAILABLE = False
+
+# =============================
+# LOGGING SETUP
+# =============================
+logger = logging.getLogger(__name__)
 
 # =============================
 # ARGUMENT PARSING
@@ -354,7 +359,6 @@ def main():
     try:
         args = parse_arguments()
         setup_logging(verbose=args.verbose, log_file=args.log_file)
-        logger = logging.getLogger(__name__)
 
         # Validate inputs
         try:
@@ -390,9 +394,9 @@ def main():
 ''')    
 
     # Configuration
-    print('''\n==============================
-    ⚙️  CONFIGURATION SUMMARY
-==============================''')
+    print('''\n=============================
+  ⚙️  CONFIGURATION SUMMARY
+=============================''')
     if args.openalex_key:
         pyalex.config.api_key = args.openalex_key
         logger.info("✅ OpenAlex: API key (100k requests/day)")
@@ -414,7 +418,7 @@ def main():
         logger.info("⏭️  Scopus search will be skipped (--skip_scopus set). Using only OpenAlex.")
     elif args.scopus_key:
         try:
-            logging.info("Scopus: Configuring API key...")
+            logger.info("⚙️ Scopus: Configuring API key...")
             pybliometrics.scopus.create_config(keys=[args.scopus_key]) # type: ignore
             pybliometrics.scopus.init() # type: ignore
             logger.info("✅ Scopus: API key configured")
@@ -435,58 +439,90 @@ def main():
     search_config = choose_search_databases(args.skip_scopus)
 
     # OpenAlex processing
-    zinput = zip(src['Service'], src['Platform'], src['Primary doi first then others'])
     if search_config['openalex']:
-        logger.info('\n🔍Starting OpenAlex information retrieval...')
-        OpenAlexServiceDict = {x: OpenAlexService(x, y, z) for x, y, z in zinput}
-        logger.info('\n🔍   Starting OpenAlex citations data elaboration...')
-        src['OpenAlexCitations'] = [el.citations for el in OpenAlexServiceDict.values()]
-        logger.info('\n🔍   Starting OpenAlex impact data elaboration...')
-        src['OpenAlexCitationsOfCiting'] = [el.citationsOfCiting for el in OpenAlexServiceDict.values()]
-        institutions = pd.concat([el.institutions for el in OpenAlexServiceDict.values() if el.institutions is not None], axis=0, ignore_index=True)
-        institutionsOfCitings = pd.concat([el.institutionsOfCiting for el in OpenAlexServiceDict.values() if el.institutionsOfCiting is not None], axis=0)
+        logger.info('\n🔍  Starting OpenAlex information retrieval...')
+        OpenAlexServiceDict = {}
+        openalex_citations = []
+        openalex_citations_of_citing = []
+        
+        for idx, row in src.iterrows():
+            service = row['Service']
+            platform = row['Platform']
+            doi_string = row['Primary doi first then others']
+            
+            try:
+                service_obj = OpenAlexService(service, platform, doi_string)
+                OpenAlexServiceDict[service] = service_obj
+                openalex_citations.append(service_obj.citations)
+                openalex_citations_of_citing.append(service_obj.citationsOfCiting)
+                logger.debug(f"✅ Successfully processed: {service}")
+            except Exception as e:
+                logger.warning(f"⚠️  OpenAlex failed for service '{service}': {e}")
+                OpenAlexServiceDict[service] = None
+                openalex_citations.append(np.nan)
+                openalex_citations_of_citing.append(np.nan)
+        
+        logger.info('\n🔍  Starting OpenAlex citations data elaboration...')
+        src['OpenAlexCitations'] = openalex_citations
+        logger.info('\n🔍  Starting OpenAlex impact data elaboration...')
+        src['OpenAlexCitationsOfCiting'] = openalex_citations_of_citing
+        
+        # Collect institutions only from successful retrievals
+        institutions = pd.concat(
+            [el.institutions for el in OpenAlexServiceDict.values() 
+             if el is not None and el.institutions is not None], 
+            axis=0, 
+            ignore_index=True
+        ) if any(el is not None and el.institutions is not None for el in OpenAlexServiceDict.values()) else pd.DataFrame()
+        
+        institutionsOfCitings = pd.concat(
+            [el.institutionsOfCiting for el in OpenAlexServiceDict.values() 
+             if el is not None and el.institutionsOfCiting is not None and not el.institutionsOfCiting.empty], 
+            axis=0
+        ) if any(el is not None and el.institutionsOfCiting is not None and not el.institutionsOfCiting.empty for el in OpenAlexServiceDict.values()) else pd.DataFrame()
     else:
         OpenAlexServiceDict = {}
         src['OpenAlexCitations'] = np.nan
         src['OpenAlexCitationsOfCiting'] = np.nan
         institutions = pd.DataFrame()
         institutionsOfCitings = pd.DataFrame()
-
-    zinput = zip(src['Service'], src['Primary doi first then others'])
     scopus_failed = False
     if search_config['scopus']:
-        logger.info('\n🔍   Starting Scopus information retrieval...')
+        logger.info('\n🔍  Starting Scopus information retrieval...')
         PyBlioInstanceDict = {}
         pyblio_citations = []
         _scopus_start = dt.now().timetuple()[0] - 20
         _scopus_end = dt.now().timetuple()[0]
         try:
-            for a, b in zinput:
-                identifiers = [el.strip() for el in str(b).split(',') if el and el.strip()]
+            for idx, row in src.iterrows():
+                service = row['Service']
+                doi_string = row['Primary doi first then others']
+                identifiers = [el.strip() for el in str(doi_string).split(',') if el and el.strip()]
                 try:
                     inst = MyCitationOverviewChunked(
-                        servname=a,
+                        servname=service,
                         identifier=identifiers,
                         start=_scopus_start,
                         end=_scopus_end,
                         id_type='doi',
                         apykey=args.scopus_key,
                     )
-                    PyBlioInstanceDict[a] = inst
+                    PyBlioInstanceDict[service] = inst
                     pyblio_citations.append(inst.grandTotal)
+                    logger.debug(f"✅ Successfully processed Scopus: {service}")
                 except Exception as exc:
-                    logger.warning(f"Scopus retrieval failed for service '{a}': {exc}")
-                    PyBlioInstanceDict[a] = None
+                    logger.warning(f"⚠️  Scopus retrieval failed for service '{service}': {exc}")
+                    PyBlioInstanceDict[service] = None
                     pyblio_citations.append(np.nan)
             src['PyBlioCitations'] = pyblio_citations
         except Exception as exc:
-            logger.error(f"Scopus block failed: {exc}. Will save only OpenAlex results.")
+            logger.error(f"❌ Scopus block failed: {exc}. Will save only OpenAlex results.")
             scopus_failed = True
     else:
         PyBlioInstanceDict = {}
         src['PyBlioCitations'] = np.nan
 
-    logger.info('\n🗃️   Starting overall data storage...')
+    logger.info('\n🗃️  Starting overall data storage...')
     os.makedirs(args.output_directory, exist_ok=True)
     # If Scopus failed, drop the column if present
     if scopus_failed and 'PyBlioCitations' in src.columns:
@@ -497,18 +533,21 @@ def main():
             institutions.to_excel(buf, sheet_name='institutions')
         if not institutionsOfCitings.empty:
             institutionsOfCitings.to_excel(buf, sheet_name='institutionsOfCitings')
-    logger.info('\n🗃️   Starting service-specific data storage...')
+    logger.info('\n🗃️  Starting service-specific data storage...')
     dir_services = os.path.join(args.output_directory, "services")
     os.makedirs(dir_services, exist_ok=True)
     for k, df in OpenAlexServiceDict.items():
-        logger.info(f"Processing {k}")
-        if not scopus_failed and search_config['scopus'] and k in PyBlioInstanceDict:
+        if df is None:
+            logger.warning(f"  ⏭️  Skipping {k} (failed during retrieval)")
+            continue
+        logger.info(f"  Processing {k}")
+        if not scopus_failed and search_config['scopus'] and k in PyBlioInstanceDict and PyBlioInstanceDict[k] is not None:
             aux = pd.concat([PyBlioInstanceDict[k].cit4year, df.mgd_citby_year], axis=0)
         else:
             aux = df.mgd_citby_year
         aux.replace(np.nan, 0, inplace=True)
         aux.to_csv(os.path.join(dir_services, re.sub(r"[/@)(]", "_", k) + ".csv"))
-    logger.info('\nFinished...Good bye 👋')
+    logger.info('\n✅ Finished...Good bye 👋')
 
     return 0
 

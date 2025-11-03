@@ -22,7 +22,7 @@ from pybliometrics.scopus import (
     AuthorRetrieval
 )
 from typing import List, Optional, Tuple, Dict
-from utils.utils import (
+from .utils.utils import (
     setup_logging, 
     validate_email,
     validate_output_directory,
@@ -50,6 +50,11 @@ __all__ = [
     'sanitize_doi',
     'sanitize_filename',
 ]
+
+# =============================
+# LOGGING SETUP
+# =============================
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # COMMAND LINE ARGUMENT PARSING
@@ -283,10 +288,10 @@ class OpenAlexAuthorSearch:
             except ValueError:
                 print("  ❌ Invalid input. Use numbers separated by commas (e.g., '1,3,5')")
 
+
 # ============================================================================
 # SCOPUS AUTHOR SEARCH
 # ============================================================================
-
 
 class ScopusAuthorSuggestion:
     """
@@ -654,7 +659,7 @@ def build_author_row(
         source: Data source ("OpenAlex" or "Scopus")
         
     Returns:
-        Dictionary with columns: Service, Applicant, Platform, Primary doi first then others
+        Dictionary with columns: Service, Applicant, Platform, Number of DOIs, Primary doi first then others
     """
     author_name = author.get('display_name', 'Unknown')
     institution = author.get('last_known_institution', '')
@@ -669,6 +674,7 @@ def build_author_row(
         "Service": author_name,
         "Applicant": institution,
         "Platform": source,
+        "Number of DOIs": len(dois),
         "Primary doi first then others": ", ".join(dois),
     }
 
@@ -807,7 +813,6 @@ def main():
         
         # Setup logging
         setup_logging(verbose=options.verbose, log_file=options.log_file)
-        logger = logging.getLogger(__name__)
 
         # Validate inputs
         print("\n  🔍 Validating inputs...")
@@ -893,22 +898,22 @@ def main():
 
     # OpenAlex configuration
     print('''\n==============================
-       📡 API Configuration
+    📡 API Configuration
 ==============================''')
     if alex_key:
         pyalex.config.api_key = alex_key
-        print("✅   OpenAlex: API key (100k requests/day)")
+        print("✅  OpenAlex: API key (100k requests/day)")
     else:
-        print("✅   OpenAlex: Polite pool (10 req/s)")
-    
+        print("✅  OpenAlex: Polite pool (10 req/s)")
+
     if mailto:
         pyalex.config.mailto = mailto
-        print(f"📧  Mail: {mailto}")
+        print(f"📧 Mail: {mailto}")
     else:
-        print("⚠️   No mailto provided")
+        print("⚠️  No mailto provided")
         if not alex_key:
-            print("❌   Need API key OR mailto for OpenAlex")
-            print("💡   Set OPENALEX_API_KEY or OPENALEX_MAILTO environment variable\n")
+            print("❌  Need API key OR mailto for OpenAlex")
+            print("💡  Set OPENALEX_API_KEY or OPENALEX_MAILTO environment variable\n")
             return 1
 
     # Scopus configuration
@@ -916,9 +921,9 @@ def main():
         try:
             pybliometrics.scopus.create_config(keys=[scopus_key]) # type: ignore
             pybliometrics.scopus.init() # type: ignore
-            print("✅   Scopus: API key configured")
+            print("✅  Scopus: API key configured")
         except Exception as exc:
-            print(f"❌   Scopus configuration failed: {exc}")
+            print(f"❌  Scopus configuration failed: {exc}")
 
     print("")  # Empty line after configuration
     
@@ -937,16 +942,16 @@ def main():
             else:
                 authors_to_process = authors_df.iloc[:, 0].dropna().tolist()
             
-            print(f"  📁 Loaded {len(authors_to_process)} authors from file\n")
+            print(f"📁 Loaded {len(authors_to_process)} authors from file\n")
         except FileNotFoundError:
-            print(f"  ❌ File not found: {input_authors}\n")
+            print(f"❌ File not found: {input_authors}\n")
             return 1
         except Exception as exc:
-            print(f"  ❌ Unable to read authors file: {exc}\n")
+            print(f"❌ Unable to read authors file: {exc}\n")
             return 1
     
     if not authors_to_process:
-        print("  ❌ No authors to process\n")
+        print("❌ No authors to process\n")
         return 1
     
     # Database selection
@@ -1050,6 +1055,6 @@ if __name__ == '__main__':
         print("\n\n⚠️  Operation cancelled by user\n")
         sys.exit(130)  # Standard exit code for SIGINT
     except Exception as exc:
-        logger.exception("Unexpected error:")
+        # logger.exception("Unexpected error:")
         print(f"\n❌ Fatal error: {exc}\n")
         sys.exit(1)

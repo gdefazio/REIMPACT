@@ -39,11 +39,16 @@ def setup_logging(verbose: bool = False, log_file: Optional[str] = None) -> None
             formatter = logging.Formatter(log_fmt)
             return formatter.format(record)
     
+    # Get root logger and remove all existing handlers
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.setLevel(log_level)
+    
     # Console handler with custom formatter
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(LevelFormatter())
-    
-    handlers = [console_handler]
+    console_handler.setLevel(log_level)
+    root_logger.addHandler(console_handler)
     
     # Add file handler if specified
     if log_file:
@@ -53,14 +58,10 @@ def setup_logging(verbose: bool = False, log_file: Optional[str] = None) -> None
                 '[%(asctime)s] %(levelname)s - %(message)s',
                 datefmt='%Y-%m-%d %H:%M:%S'
             ))
-            handlers.append(file_handler)
+            file_handler.setLevel(log_level)
+            root_logger.addHandler(file_handler)
         except Exception as exc:
             print(f"⚠️  Warning: Could not create log file {log_file}: {exc}")
-    
-    logging.basicConfig(
-        level=log_level,
-        handlers=handlers
-    )
 
 # ============================================================================
 # INPUT VALIDATION FUNCTIONS
