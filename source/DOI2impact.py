@@ -11,8 +11,8 @@ import os
 import re
 import logging
 import pyalex
-import pybliometrics.scopus
-from pybliometrics.scopus import CitationOverview
+import Scopus.scopus
+from Scopus.scopus import CitationOverview
 from functools import reduce
 from datetime import datetime as dt
 from typing import Optional
@@ -97,7 +97,7 @@ Examples:
         "-s", "--scopus_key",
         type=str,
         default=os.getenv('SCOPUS_API_KEY'),
-        help="Scopus API key for pybliometrics. Can also set SCOPUS_API_KEY env var",
+        help="Scopus API key for Scopus. Can also set SCOPUS_API_KEY env var",
         metavar="KEY"
     )
 
@@ -130,7 +130,7 @@ Examples:
     if not args.openalex_key and not args.openalex_mailto:
         parser.error("You must provide either an OpenAlex API key (-a) or an email (-m) for polite pool access.")
     if not args.skip_scopus and not args.scopus_key:
-        parser.error("Pybliometrics API key (-s) is required unless --skip_scopus is specified.")
+        parser.error("Scopus API key (-s) is required unless --skip_scopus is specified.")
 
     return args
 
@@ -368,8 +368,8 @@ def main():
                 validate_email(args.openalex_mailto)
             if not args.skip_scopus:
                 if not args.scopus_key:
-                    raise ValidationError("Pybliometrics API key is required unless --skip_scopus is specified.")
-                validate_api_key(args.scopus_key, key_name="Pybliometrics API key")
+                    raise ValidationError("Scopus API key is required unless --skip_scopus is specified.")
+                validate_api_key(args.scopus_key, key_name="Scopus API key")
             if args.openalex_key:
                 validate_api_key(args.openalex_key, key_name="OpenAlex API key")
         except ValidationError as e:
@@ -387,7 +387,7 @@ def main():
     logger.info('''
 ################################################################################################
 #                                                                                              #
-#      CITATION OVERVIEW SYSTEM FOR BIBLIOMETRIC ASSESSMENT RELYING ON OPENALEX AND SCOPUS     #
+#      CITATION OVERVIEW SYSTEM FOR BIBLIOMETRIC ASSESSMENT RELYING ON OPENALEX AND Scopus   #
 #                                    POWERED BY ELIXIR-IIB                                     #
 #                                                                                              #
 ################################################################################################
@@ -419,8 +419,8 @@ def main():
     elif args.scopus_key:
         try:
             logger.info("⚙️ Scopus: Configuring API key...")
-            pybliometrics.scopus.create_config(keys=[args.scopus_key]) # type: ignore
-            pybliometrics.scopus.init() # type: ignore
+            Scopus.scopus.create_config(keys=[args.scopus_key]) # type: ignore
+            Scopus.scopus.init() # type: ignore
             logger.info("✅ Scopus: API key configured")
         except Exception as exc:
             logger.error(f"❌ Scopus configuration failed: {exc}")    
