@@ -540,7 +540,7 @@ def main():
         if df is None:
             logger.warning(f"  ⏭️  Skipping {k} (failed during retrieval)")
             continue
-        logger.info(f"  Processing {k}")
+        logger.info(f"\tProcessing {k}")
         if not scopus_failed and search_config['scopus'] and k in PyBlioInstanceDict and PyBlioInstanceDict[k] is not None:
             aux = pd.concat([PyBlioInstanceDict[k].cit4year, df.mgd_citby_year], axis=0)
         else:
