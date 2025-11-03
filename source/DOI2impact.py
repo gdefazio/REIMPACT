@@ -11,8 +11,8 @@ import os
 import re
 import logging
 import pyalex
-import Scopus.scopus
-from Scopus.scopus import CitationOverview
+import pybliometrics.scopus
+from pybliometrics.scopus import CitationOverview
 from functools import reduce
 from datetime import datetime as dt
 from typing import Optional
@@ -97,7 +97,7 @@ Examples:
         "-s", "--scopus_key",
         type=str,
         default=os.getenv('SCOPUS_API_KEY'),
-        help="Scopus API key for Scopus. Can also set SCOPUS_API_KEY env var",
+        help="Scopus API key for pybliometrics. Can also set SCOPUS_API_KEY env var",
         metavar="KEY"
     )
 
@@ -387,7 +387,7 @@ def main():
     logger.info('''
 ################################################################################################
 #                                                                                              #
-#      CITATION OVERVIEW SYSTEM FOR BIBLIOMETRIC ASSESSMENT RELYING ON OPENALEX AND Scopus   #
+#      CITATION OVERVIEW SYSTEM FOR BIBLIOMETRIC ASSESSMENT RELYING ON OPENALEX AND SCOPUS     #
 #                                    POWERED BY ELIXIR-IIB                                     #
 #                                                                                              #
 ################################################################################################
@@ -419,8 +419,8 @@ def main():
     elif args.scopus_key:
         try:
             logger.info("⚙️ Scopus: Configuring API key...")
-            Scopus.scopus.create_config(keys=[args.scopus_key]) # type: ignore
-            Scopus.scopus.init() # type: ignore
+            pybliometrics.scopus.create_config(keys=[args.scopus_key]) # type: ignore
+            pybliometrics.scopus.init() # type: ignore
             logger.info("✅ Scopus: API key configured")
         except Exception as exc:
             logger.error(f"❌ Scopus configuration failed: {exc}")    
