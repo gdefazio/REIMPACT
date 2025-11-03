@@ -40,7 +40,7 @@ conda activate elixir_impact
 pip install -e .
 ```
 
-See [INSTALLATION.md](docs/INSTALLATION.md) for detailed instructions.
+See [INSTALLATION](docs/INSTALLATION.md) for detailed instructions.
 
 ---
 
@@ -190,7 +190,7 @@ elixir-doi-impact --help
 
 ## Installation
 
-See [INSTALLATION.md](docs/INSTALLATION.md) for detailed instructions on:
+See [INSTALLATION](docs/INSTALLATION.md) for detailed instructions on:
 - Environment setup
 - Package installation
 - API configuration
