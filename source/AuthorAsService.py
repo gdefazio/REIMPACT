@@ -25,7 +25,7 @@ from typing import List, Optional, Tuple, Dict
 from .utils.utils import (
     setup_logging, 
     validate_email,
-    validate_output,
+    validate_output_directory,
     validate_api_key,
     validate_author_name,
     validate_authors_file,
