@@ -25,7 +25,7 @@ from typing import List, Optional, Tuple, Dict
 from .utils.utils import (
     setup_logging, 
     validate_email,
-    validate_output_directory,
+    validate_output,
     validate_api_key,
     validate_author_name,
     validate_authors_file,
@@ -116,6 +116,14 @@ Examples:
         default=os.getenv('OPENALEX_MAILTO'),
         help="Contact email for OpenAlex polite pool. Can also set OPENALEX_MAILTO env var",
         metavar="EMAIL"
+    )
+    api_group.add_argument(
+        "--openalex_data_version",
+        type=int,
+        choices=[1, 2],
+        default=2,
+        help="OpenAlex data version: 1=Classic (old), 2=Walden (new, default). See https://oreo.openalex.org/",
+        metavar="VERSION"
     )
     api_group.add_argument(
         "-s", "--scopus_key",
@@ -896,6 +904,11 @@ def main():
         print("✅  OpenAlex: API key (100k requests/day)")
     else:
         print("✅  OpenAlex: Polite pool (10 req/s)")
+
+    # Set OpenAlex data version
+    pyalex.config.data_version = options.openalex_data_version
+    version_name = "Walden (new)" if options.openalex_data_version == 2 else "Classic (old)"
+    print(f"📊 OpenAlex data version: {options.openalex_data_version} ({version_name})")
 
     if mailto:
         pyalex.config.mailto = mailto

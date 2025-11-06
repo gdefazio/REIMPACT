@@ -177,40 +177,49 @@ def validate_authors_file(filepath: str) -> bool:
     return True
 
 
-def validate_output_directory(dirpath: str) -> bool:
+def validate_output(filepath: str) -> bool:
     """
-    Validate output directory path and write permissions.
+    Validate output file path and write permissions.
     
     Args:
-        dirpath: Directory path
+        filepath: File path
         
     Returns:
         True if valid
         
     Raises:
-        ValidationError: If directory is invalid or not writable
+        ValidationError: If file path is invalid or not writable
     """
     from pathlib import Path
     
-    if not dirpath:
-        raise ValidationError("Output directory cannot be empty")
+    if not filepath:
+        raise ValidationError("Output file path cannot be empty")
     
-    dir_path = Path(dirpath)
+    file_path = Path(filepath)
     
-    # If directory doesn't exist, check if parent is writable
-    if not dir_path.exists():
-        parent = dir_path.parent
-        if not parent.exists():
-            raise ValidationError(f"Parent directory does not exist: {parent}")
-        if not os.access(str(parent), os.W_OK):
-            raise ValidationError(f"Parent directory is not writable: {parent}")
+    # Check if file already exists
+    if file_path.exists():
+        if not file_path.is_file():
+            raise ValidationError(f"Path exists but is not a file: {filepath}")
+        if not os.access(str(file_path), os.W_OK):
+            raise ValidationError(f"File is not writable: {filepath}")
     else:
-        # Directory exists, check if it's actually a directory
-        if not dir_path.is_dir():
-            raise ValidationError(f"Path exists but is not a directory: {dirpath}")
-        # Check write permissions
-        if not os.access(str(dir_path), os.W_OK):
-            raise ValidationError(f"Directory is not writable: {dirpath}")
+        # File doesn't exist, check parent directory
+        parent = file_path.parent
+        
+        # If parent doesn't exist, check if we can create it
+        # Walk up the directory tree to find the first existing ancestor
+        current = parent
+        while current and not current.exists():
+            current = current.parent
+        
+        # Check if the first existing ancestor is writable
+        if current and current.exists():
+            if not os.access(str(current), os.W_OK):
+                raise ValidationError(f"Cannot create directory in: {current} (not writable)")
+        else:
+            # Reached root without finding existing directory (very unusual)
+            raise ValidationError(f"Cannot determine if path is writable: {filepath}")
     
     return True
 

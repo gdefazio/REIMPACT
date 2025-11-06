@@ -21,7 +21,7 @@ import numpy as np
 import argparse
 import requests
 from collections import deque
-from .utils.utils import setup_logging, validate_email, validate_file, validate_output_directory, validate_api_key, sanitize_doi, ValidationError
+from .utils.utils import setup_logging, validate_email, validate_file, validate_output, validate_api_key, sanitize_doi, ValidationError
 # Optional dependency
 try:
     import argcomplete
@@ -70,11 +70,11 @@ Examples:
     # Output options
     output_group = parser.add_argument_group('Output Options')
     output_group.add_argument(
-        "-o", "--output_directory",
+        "-o", "--output",
         type=str,
-        default="./impact_results",
-        help="Output directory (default: ./impact_results)",
-        metavar="DIR"
+        default="./impact_results/ELIXIR.IT_IMPACT.xlsx",
+        help="Output file (default: ./impact_results/ELIXIR.IT_IMPACT.xlsx)",
+        metavar="OUTPUT"
     )
 
     # API configuration
@@ -92,6 +92,14 @@ Examples:
         default=os.getenv('OPENALEX_MAILTO'),
         help="Contact email for OpenAlex polite pool (REQUIRED if no API key, recommended always). Can also set openalex_mailto env var",
         metavar="EMAIL"
+    )
+    api_group.add_argument(
+        "--openalex_data_version",
+        type=int,
+        choices=[1, 2],
+        default=2,
+        help="OpenAlex data version: 1=Classic (old), 2=Walden (new, default). See https://oreo.openalex.org/",
+        metavar="VERSION"
     )
     api_group.add_argument(
         "-s", "--scopus_key",
@@ -176,7 +184,22 @@ class OpenAlexDoi:
         if not cleaned_doi:
             raise ValueError(f"Invalid DOI: {doi}")
         self.doi = cleaned_doi
-        self.object = pyalex.Works()[f"https://doi.org/{cleaned_doi}"]
+        
+        # Direct access using DOI URL (original logic)
+        try:
+            self.object = pyalex.Works()[f"https://doi.org/{cleaned_doi}"]
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                raise ValueError(f"DOI not found in OpenAlex: {cleaned_doi}")
+            else:
+                raise ValueError(f"OpenAlex HTTP error {e.response.status_code} for DOI {cleaned_doi}: {e}")
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Network error retrieving DOI {cleaned_doi} from OpenAlex: {e}")
+        except KeyError as e:
+            raise ValueError(f"DOI not found in OpenAlex: {cleaned_doi}")
+        except Exception as e:
+            raise ValueError(f"Failed to retrieve DOI {cleaned_doi} from OpenAlex: {e}")
+        
         self.citations = self.object['cited_by_count']
         self.authors = pd.DataFrame(self.object['authorships'])
         self.cit_by_years = pd.DataFrame(self.object['counts_by_year'])
@@ -199,17 +222,28 @@ class OpenAlexDoi:
         return melt
 
     def get_citing_works(self) -> tuple:
-        cited_by_url = self.object.get('cited_by_api_url')
-        if not cited_by_url:
+        # Build cited_by URL manually since cited_by_api_url field no longer exists
+        work_id = self.object.get('id')
+        if not work_id:
             return None, None
+        
+        # OpenAlex API endpoint to get works that cite this work
+        cited_by_url = f"https://api.openalex.org/works?filter=cites:{work_id}"
+        
         per_page = 200
         total_cited_by = 0
         rows = []
         page = 1
+        
         while True:
             params = {"page": page, "per-page": per_page}
+            
+            if hasattr(pyalex.config, 'data_version') and pyalex.config.data_version:
+                params["data-version"] = pyalex.config.data_version
+            
             ans = requests.get(cited_by_url, params=params)
             if ans.status_code != 200:
+                logger.debug(f"Failed to get citing works (page {page}): {ans.status_code}")
                 break
             j_ans = ans.json()
             results = j_ans.get('results', [])
@@ -233,16 +267,40 @@ class OpenAlexDoi:
             if len(results) < per_page:
                 break
             page += 1
+        
         citing_df = pd.DataFrame(rows) if rows else None
-        total_cited_by = total_cited_by or None
-        return total_cited_by, citing_df
+        # Don't convert 0 to None - 0 is a valid value!
+        return total_cited_by if total_cited_by > 0 else (0 if citing_df is not None else None), citing_df
 
 class OpenAlexService:
     def __init__(self, service, platform, doiString: str) -> None:
         self.service = service
         self.platform = platform
         self.doiSplit = [el.strip() for el in doiString.split(',')]
-        self.openAlexDict = {doi: OpenAlexDoi(service, platform, doi) for doi in self.doiSplit}
+        
+        # Try each DOI individually and collect only successful ones
+        self.openAlexDict = {}
+        failed_dois = []
+
+        for doi in self.doiSplit:
+            doi = sanitize_doi(doi)
+            try:
+                self.openAlexDict[doi] = OpenAlexDoi(service, platform, doi)
+            except Exception as e:
+                logger.warning(f"{e}")
+                failed_dois.append(doi)
+        
+        # If ALL DOIs failed, raise an error to stop processing this service
+        if len(self.openAlexDict) == 0:
+            if failed_dois:
+                raise ValueError(f"All {len(failed_dois)} DOI(s) failed for service '{service}': {', '.join(failed_dois)}")
+            else:
+                raise ValueError(f"No valid DOIs found for service '{service}'")
+        
+        # If only some DOIs failed, log warning and continue
+        if failed_dois:
+            logger.warning(f"{len(failed_dois)}/{len(self.doiSplit)} DOI(s) skipped for '{service}': {', '.join(failed_dois)}")
+        
         self.citations = sum([el.citations for el in self.openAlexDict.values()])
         OfCiting = [el.get_citing_works() for el in self.openAlexDict.values()]
         self.citationsOfCiting = sum([el[0] for el in OfCiting if el[0] is not None])
@@ -273,9 +331,8 @@ class OpenAlexService:
         self.mgd_citby_year = self.mgd_citby_year.T
         self.mgd_citby_year['provider'] = 'OpenAlex'
 
-# --- Scopus ---
 
-# --- Scopus chunked logic ---
+# --- Scopus ---
 class MyCitationOverview(CitationOverview):
     def __init__(self, identifier, servname, apykey,
                  start=dt.now().timetuple()[0]-20,
@@ -367,7 +424,7 @@ def main():
         # Validate inputs
         try:
             validate_file(args.input_excel)
-            validate_output_directory(args.output_directory)
+            validate_output(args.output)
             if args.openalex_mailto:
                 validate_email(args.openalex_mailto)
             if not args.skip_scopus:
@@ -407,6 +464,11 @@ def main():
     else:
         logger.info("✅ OpenAlex: Polite pool (10 req/s)")
     
+    # Set OpenAlex data version
+    pyalex.config.data_version = args.openalex_data_version
+    version_name = "Walden (new)" if args.openalex_data_version == 2 else "Classic (old)"
+    logger.info(f"📊 OpenAlex data version: {args.openalex_data_version} ({version_name})")
+    
     if args.openalex_mailto:
         pyalex.config.mailto = args.openalex_mailto
         logger.info(f"📧 Email: {args.openalex_mailto}")
@@ -429,7 +491,7 @@ def main():
         except Exception as exc:
             logger.error(f"❌ Scopus configuration failed: {exc}")    
     logger.info(f"📄 Input excel file: {args.input_excel}")
-    logger.info(f"📁 Output directory: {args.output_directory}")
+    logger.info(f"📁 Output directory: {args.output}")
 
     # Load input
     try:
@@ -451,6 +513,7 @@ def main():
         
         for idx, row in src.iterrows():
             service = row['Service']
+            logger.info(f"\n📰 Processing service: {service}")
             platform = row['Platform']
             doi_string = row['Primary doi first then others']
             
@@ -461,7 +524,7 @@ def main():
                 openalex_citations_of_citing.append(service_obj.citationsOfCiting)
                 logger.debug(f"✅ Successfully processed: {service}")
             except Exception as e:
-                logger.warning(f"⚠️  OpenAlex failed for service '{service}': {e}")
+                logger.warning(f"OpenAlex failed for service '{service}': {e}")
                 OpenAlexServiceDict[service] = None
                 openalex_citations.append(np.nan)
                 openalex_citations_of_citing.append(np.nan)
@@ -490,6 +553,8 @@ def main():
         src['OpenAlexCitationsOfCiting'] = np.nan
         institutions = pd.DataFrame()
         institutionsOfCitings = pd.DataFrame()
+    
+    # Scopus processing
     scopus_failed = False
     if search_config['scopus']:
         logger.info('\n🔍  Starting Scopus information retrieval...')
@@ -527,26 +592,41 @@ def main():
         src['PyBlioCitations'] = np.nan
 
     logger.info('\n🗃️  Starting overall data storage...')
-    os.makedirs(args.output_directory, exist_ok=True)
+    # Extract directory from output path and create it
+    output_dir = os.path.dirname(args.output)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+    
     # If Scopus failed, drop the column if present
     if scopus_failed and 'PyBlioCitations' in src.columns:
         src = src.drop(columns=['PyBlioCitations'])
-    with pd.ExcelWriter(os.path.join(args.output_directory, 'ELIXIR.IT_IMPACT.xlsx')) as buf:
+    
+    # Write Excel file using the full file path
+    with pd.ExcelWriter(args.output) as buf:
         src.to_excel(buf, sheet_name='summary')
         if not institutions.empty:
             institutions.to_excel(buf, sheet_name='institutions')
         if not institutionsOfCitings.empty:
             institutionsOfCitings.to_excel(buf, sheet_name='institutionsOfCitings')
+    
     logger.info('\n🗃️  Starting service-specific data storage...')
-    dir_services = os.path.join(args.output_directory, "services")
+    # Create services directory next to the output file
+    dir_services = os.path.join(output_dir if output_dir else '.', "services")
     os.makedirs(dir_services, exist_ok=True)
     for k, df in OpenAlexServiceDict.items():
         if df is None:
-            logger.warning(f"  ⏭️  Skipping {k} (failed during retrieval)")
+            logger.warning(f"Skipping {k} (failed during retrieval)")
             continue
-        logger.info(f"\tProcessing {k}")
         if not scopus_failed and search_config['scopus'] and k in PyBlioInstanceDict and PyBlioInstanceDict[k] is not None:
-            aux = pd.concat([PyBlioInstanceDict[k].cit4year, df.mgd_citby_year], axis=0)
+            scopus_df = PyBlioInstanceDict[k].cit4year
+            openalex_df = df.mgd_citby_year
+            # Only concat if both have data to avoid FutureWarning
+            if not scopus_df.empty and not openalex_df.empty:
+                aux = pd.concat([scopus_df, openalex_df], axis=0)
+            elif not scopus_df.empty:
+                aux = scopus_df
+            else:
+                aux = openalex_df
         else:
             aux = df.mgd_citby_year
         aux.fillna(0, inplace=True)
