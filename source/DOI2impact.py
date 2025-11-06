@@ -245,7 +245,7 @@ class OpenAlexDoi:
         
         while True:
             params = {"page": page, "per-page": per_page}
-            
+            # Maybe not usedful, but keep for consistency
             if hasattr(pyalex.config, 'data_version') and pyalex.config.data_version:
                 params["data-version"] = pyalex.config.data_version
             
@@ -521,7 +521,7 @@ def main():
         
         for idx, row in src.iterrows():
             service = row['Service']
-            logger.info(f"\n📰 Processing service: {service}\r")
+            logger.info(f"\n📰 Processing service: {service}")
             platform = row['Platform']
             doi_string = row['Primary doi first then others']
             
@@ -530,7 +530,7 @@ def main():
                 OpenAlexServiceDict[service] = service_obj
                 openalex_citations.append(service_obj.citations)
                 openalex_citations_of_citing.append(service_obj.citationsOfCiting)
-                logger.info(f"✅")
+                logger.info(f"\r📰 Processing service: {service} ✅")
             except Exception as e:
                 logger.warning(f"OpenAlex retrieval failed for service '{service}': {e}")
                 OpenAlexServiceDict[service] = None
