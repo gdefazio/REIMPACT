@@ -7,7 +7,7 @@ Provides validation, logging, and helper functions.
 from .utils import (
     setup_logging,
     validate_email,
-    validate_output,
+    validate_output_directory,
     validate_api_key,
     validate_author_name,
     validate_authors_file,
@@ -18,7 +18,7 @@ from .utils import (
 __all__ = [
     'setup_logging',
     'validate_email',
-    'validate_output',
+    'validate_output_directory',
     'validate_api_key',
     'validate_author_name',
     'validate_authors_file',

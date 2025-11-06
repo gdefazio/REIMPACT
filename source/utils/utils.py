@@ -177,39 +177,30 @@ def validate_authors_file(filepath: str) -> bool:
     return True
 
 
-def validate_output(filepath: str) -> bool:
+def validate_output_directory(dirpath: str) -> bool:
     """
-    Validate output file path and write permissions.
+    Validate output directory path and write permissions.
     
     Args:
-        filepath: File path
+        dirpath: Directory path
         
     Returns:
         True if valid
         
     Raises:
-        ValidationError: If file path is invalid or not writable
+        ValidationError: If directory is invalid or not writable
     """
     from pathlib import Path
     
-    if not filepath:
-        raise ValidationError("Output file path cannot be empty")
+    if not dirpath:
+        raise ValidationError("Output directory cannot be empty")
     
-    file_path = Path(filepath)
+    dir_path = Path(dirpath)
     
-    # Check if file already exists
-    if file_path.exists():
-        if not file_path.is_file():
-            raise ValidationError(f"Path exists but is not a file: {filepath}")
-        if not os.access(str(file_path), os.W_OK):
-            raise ValidationError(f"File is not writable: {filepath}")
-    else:
-        # File doesn't exist, check parent directory
-        parent = file_path.parent
-        
-        # If parent doesn't exist, check if we can create it
+    # If directory doesn't exist, check if we can create it
+    if not dir_path.exists():
         # Walk up the directory tree to find the first existing ancestor
-        current = parent
+        current = dir_path.parent
         while current and not current.exists():
             current = current.parent
         
@@ -219,7 +210,14 @@ def validate_output(filepath: str) -> bool:
                 raise ValidationError(f"Cannot create directory in: {current} (not writable)")
         else:
             # Reached root without finding existing directory (very unusual)
-            raise ValidationError(f"Cannot determine if path is writable: {filepath}")
+            raise ValidationError(f"Cannot determine if path is writable: {dirpath}")
+    else:
+        # Directory exists, check if it's actually a directory
+        if not dir_path.is_dir():
+            raise ValidationError(f"Path exists but is not a directory: {dirpath}")
+        # Check write permissions
+        if not os.access(str(dir_path), os.W_OK):
+            raise ValidationError(f"Directory is not writable: {dirpath}")
     
     return True
 

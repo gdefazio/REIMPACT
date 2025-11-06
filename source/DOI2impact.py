@@ -21,7 +21,15 @@ import numpy as np
 import argparse
 import requests
 from collections import deque
-from .utils.utils import setup_logging, validate_email, validate_file, validate_output, validate_api_key, sanitize_doi, ValidationError
+from .utils.utils import (
+    setup_logging,
+    validate_email,
+    validate_file,
+    validate_output_directory,
+    validate_api_key,
+    sanitize_doi,
+    ValidationError
+)
 # Optional dependency
 try:
     import argcomplete
@@ -72,9 +80,9 @@ Examples:
     output_group.add_argument(
         "-o", "--output",
         type=str,
-        default="./impact_results/ELIXIR.IT_IMPACT.xlsx",
-        help="Output file (default: ./impact_results/ELIXIR.IT_IMPACT.xlsx)",
-        metavar="OUTPUT"
+        default="./impact_results",
+        help="Output directory (default: ./impact_results)",
+        metavar="DIR"
     )
 
     # API configuration
@@ -299,7 +307,7 @@ class OpenAlexService:
         
         # If only some DOIs failed, log warning and continue
         if failed_dois:
-            logger.warning(f"{len(failed_dois)}/{len(self.doiSplit)} DOI(s) skipped for '{service}': {', '.join(failed_dois)}")
+            logger.warning(f"{len(failed_dois)}/{len(self.doiSplit)} DOI(s) skipped for '{service}'")
         
         self.citations = sum([el.citations for el in self.openAlexDict.values()])
         OfCiting = [el.get_citing_works() for el in self.openAlexDict.values()]
@@ -424,7 +432,7 @@ def main():
         # Validate inputs
         try:
             validate_file(args.input_excel)
-            validate_output(args.output)
+            validate_output_directory(args.output)
             if args.openalex_mailto:
                 validate_email(args.openalex_mailto)
             if not args.skip_scopus:
@@ -484,7 +492,7 @@ def main():
         logger.info("⏭️  Scopus search will be skipped (--skip_scopus set). Using only OpenAlex.")
     elif args.scopus_key:
         try:
-            logger.info("⚙️ Scopus: Configuring API key...")
+            logger.info("⚙️  Scopus: Configuring API key...")
             pybliometrics.scopus.create_config(keys=[args.scopus_key]) # type: ignore
             pybliometrics.scopus.init() # type: ignore
             logger.info("✅ Scopus: API key configured")
@@ -513,7 +521,7 @@ def main():
         
         for idx, row in src.iterrows():
             service = row['Service']
-            logger.info(f"\n📰 Processing service: {service}")
+            logger.info(f"\n📰 Processing service: {service}\r")
             platform = row['Platform']
             doi_string = row['Primary doi first then others']
             
@@ -522,9 +530,9 @@ def main():
                 OpenAlexServiceDict[service] = service_obj
                 openalex_citations.append(service_obj.citations)
                 openalex_citations_of_citing.append(service_obj.citationsOfCiting)
-                logger.debug(f"✅ Successfully processed: {service}")
+                logger.info(f"✅")
             except Exception as e:
-                logger.warning(f"OpenAlex failed for service '{service}': {e}")
+                logger.warning(f"OpenAlex retrieval failed for service '{service}': {e}")
                 OpenAlexServiceDict[service] = None
                 openalex_citations.append(np.nan)
                 openalex_citations_of_citing.append(np.nan)
@@ -592,17 +600,16 @@ def main():
         src['PyBlioCitations'] = np.nan
 
     logger.info('\n🗃️  Starting overall data storage...')
-    # Extract directory from output path and create it
-    output_dir = os.path.dirname(args.output)
-    if output_dir and not os.path.exists(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
+    # Create output directory if it doesn't exist
+    os.makedirs(args.output, exist_ok=True)
     
     # If Scopus failed, drop the column if present
     if scopus_failed and 'PyBlioCitations' in src.columns:
         src = src.drop(columns=['PyBlioCitations'])
     
-    # Write Excel file using the full file path
-    with pd.ExcelWriter(args.output) as buf:
+    # Write Excel file in the output directory
+    output_file = os.path.join(args.output, 'ELIXIR.IT_IMPACT.xlsx')
+    with pd.ExcelWriter(output_file) as buf:
         src.to_excel(buf, sheet_name='summary')
         if not institutions.empty:
             institutions.to_excel(buf, sheet_name='institutions')
@@ -610,8 +617,8 @@ def main():
             institutionsOfCitings.to_excel(buf, sheet_name='institutionsOfCitings')
     
     logger.info('\n🗃️  Starting service-specific data storage...')
-    # Create services directory next to the output file
-    dir_services = os.path.join(output_dir if output_dir else '.', "services")
+    # Create services directory inside the output directory
+    dir_services = os.path.join(args.output, "services")
     os.makedirs(dir_services, exist_ok=True)
     for k, df in OpenAlexServiceDict.items():
         if df is None:
