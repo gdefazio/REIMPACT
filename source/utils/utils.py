@@ -4,6 +4,7 @@ import logging
 import pandas as pd
 import sys
 from typing import Optional
+from urllib.parse import unquote
 
 logger = logging.getLogger(__name__)
 
@@ -307,3 +308,42 @@ def validate_max_works(max_works: Optional[int]) -> bool:
         logger.warning(f"max_works is very large ({max_works}). This may take a long time.")
     
     return True
+
+
+# ============================================================================
+# DOI UTILITIES
+# ============================================================================
+
+def sanitize_doi(doi: str) -> Optional[str]:
+    """
+    Clean and normalize DOI string, handling URL encoding.
+    
+    This function handles various DOI formats including:
+    - URL-encoded DOIs (e.g., "https%3A%2F%2Fdoi.org%2F10.1093%2Fnar%2Fgkr930")
+    - DOIs with https://doi.org/ prefix
+    - Plain DOIs
+    
+    Args:
+        doi: Raw DOI string (potentially URL-encoded)
+        
+    Returns:
+        Cleaned DOI without prefix, or None if invalid
+    """
+    if not doi:
+        return None
+    
+    # First decode URL encoding (%3A → :, %2F → /, etc.)
+    doi = unquote(str(doi))
+    
+    # Then normalize: lowercase and strip whitespace
+    doi = doi.lower().strip()
+    
+    # Remove common prefixes
+    if doi.startswith("https://doi.org/"):
+        doi = doi.replace("https://doi.org/", "", 1)
+    elif doi.startswith("http://doi.org/"):
+        doi = doi.replace("http://doi.org/", "", 1)
+    elif doi.startswith("doi:"):
+        doi = doi.replace("doi:", "", 1)
+    
+    return doi if doi else None

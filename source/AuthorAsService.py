@@ -30,6 +30,7 @@ from .utils.utils import (
     validate_author_name,
     validate_authors_file,
     validate_max_works,
+    sanitize_doi,
     ValidationError
 )
 # Optional dependency
@@ -500,22 +501,7 @@ class ScopusAuthorSuggestion:
 # ============================================================================
 
 
-def sanitize_doi(doi: str) -> Optional[str]:
-    """
-    Clean and normalize DOI string.
-    
-    Args:
-        doi: Raw DOI string
-        
-    Returns:
-        Cleaned DOI or None if invalid
-    """
-    if not doi:
-        return None
-    doi = doi.lower().strip()
-    if doi.startswith("https://doi.org/"):
-        doi = doi.replace("https://doi.org/", "", 1)
-    return doi if doi else None
+
 
 
 def sanitize_filename(name: str) -> str:

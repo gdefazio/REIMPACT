@@ -21,7 +21,7 @@ import numpy as np
 import argparse
 import requests
 from collections import deque
-from .utils.utils import setup_logging, validate_email, validate_file, validate_output_directory, validate_api_key, ValidationError
+from .utils.utils import setup_logging, validate_email, validate_file, validate_output_directory, validate_api_key, sanitize_doi, ValidationError
 # Optional dependency
 try:
     import argcomplete
@@ -171,8 +171,12 @@ class OpenAlexDoi:
     def __init__(self, service, platform, doi) -> None:
         self.service = service
         self.platform = platform
-        self.doi = doi
-        self.object = pyalex.Works()[f"https://doi.org/{doi}"]
+        # Clean DOI to handle URL-encoded strings
+        cleaned_doi = sanitize_doi(doi)
+        if not cleaned_doi:
+            raise ValueError(f"Invalid DOI: {doi}")
+        self.doi = cleaned_doi
+        self.object = pyalex.Works()[f"https://doi.org/{cleaned_doi}"]
         self.citations = self.object['cited_by_count']
         self.authors = pd.DataFrame(self.object['authorships'])
         self.cit_by_years = pd.DataFrame(self.object['counts_by_year'])
