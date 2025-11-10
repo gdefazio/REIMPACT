@@ -70,6 +70,18 @@ def setup_logging(verbose: bool = False, log_file: Optional[str] = None) -> None
 # INPUT VALIDATION FUNCTIONS
 # ============================================================================
 
+def sanitize_filename(name: str) -> str:
+    """
+    Sanitize author name for use in filename.
+    
+    Args:
+        name: Author name
+        
+    Returns:
+        Sanitized filename-safe string
+    """
+    return name.replace(',', '').replace(' ', '_').replace('.', '').strip()
+
 def validate_file(filepath: str) -> bool:
     """
     Validate Excel file.

@@ -172,9 +172,9 @@ def choose_search_databases(skip_scopus_flag: bool) -> dict:
     print("     🗃️  DATABASE SELECTION")
     print("==============================")
     print("Where do you want to search for citations?")
-    print("  [1] OpenAlex only")
-    print("  [2] Scopus only")
-    print("  [3] Both OpenAlex and Scopus")
+    print("  [1] OpenAlex")
+    print("  [2] Scopus")
+    print("  [3] Both")
     while True:
         choice = input("Enter your choice (1-3): ").strip()
         if choice == '1':
@@ -186,7 +186,9 @@ def choose_search_databases(skip_scopus_flag: bool) -> dict:
         else:
             print("Invalid choice. Please enter 1, 2, or 3.")
 
-# --- OpenAlex ---
+# =============================
+# OpenAlex
+# =============================
 _OPENALEX_SESSION = requests.Session()
 _OPENALEX_RATE_LOG = deque(maxlen=200)
 
@@ -284,7 +286,7 @@ class OpenAlexDoi:
             page += 1
         
         citing_df = pd.DataFrame(rows) if rows else None
-        # Don't convert 0 to None - 0 is a valid value!
+
         return total_cited_by if total_cited_by > 0 else (0 if citing_df is not None else None), citing_df
 
 class OpenAlexService:
@@ -305,13 +307,12 @@ class OpenAlexService:
                 logger.warning(f"{e}")
                 failed_dois.append(doi)
         
-        # If ALL DOIs failed, raise an error to stop processing this service
+        # If all DOIs failed, raise an error to stop processing this service
         if len(self.openAlexDict) == 0:
             if failed_dois:
                 raise ValueError(f"All {len(failed_dois)} DOI(s) failed for service '{service}': {', '.join(failed_dois)}")
             else:
                 raise ValueError(f"No valid DOIs found for service '{service}'")
-        
         # If only some DOIs failed, log warning and continue
         if failed_dois:
             logger.warning(f"{len(failed_dois)}/{len(self.doiSplit)} DOI(s) skipped for '{service}'")
@@ -346,8 +347,9 @@ class OpenAlexService:
         self.mgd_citby_year = self.mgd_citby_year.T
         self.mgd_citby_year['provider'] = 'OpenAlex'
 
-
-# --- Scopus ---
+# =============================
+# Scopus
+# =============================
 class MyCitationOverview(CitationOverview):
     def __init__(self, identifier, servname, apykey,
                  start=dt.now().timetuple()[0]-20,
@@ -401,8 +403,8 @@ class MyCitationOverviewChunked:
                 self._instances.append(inst)
             except Exception as e:
                 error_name = type(e).__name__
-                logging.getLogger(__name__).debug(f"Chunk {i//25 + 1} failed with error: {error_name}: {e}")
-                # Try DOIs individually to identify problematic ones
+                logger.debug(f"Chunk {i//25 + 1} failed with error: {error_name}: {e}")
+
                 for doi in chunk:
                     try:
                         inst = MyCitationOverview(
@@ -415,8 +417,7 @@ class MyCitationOverviewChunked:
                         )
                         self._instances.append(inst)
                     except Exception as doi_error:
-                        logging.getLogger(__name__).debug(f"DOI {doi}: Not found in Scopus - {type(doi_error).__name__}")
-                        # Continue without this DOI
+                        logger.debug(f"DOI {doi}: Not found in Scopus - {type(doi_error).__name__}")
     @property
     def grandTotal(self) -> int:
         return int(sum(inst.grandTotal for inst in self._instances)) if self._instances else 0
@@ -430,7 +431,6 @@ class MyCitationOverviewChunked:
 # ============================================================================
 # MAIN ENTRY POINT
 # ============================================================================
-
 def main():
     try:
         args = parse_arguments()
@@ -439,17 +439,14 @@ def main():
         # Validate inputs
         try:
             validate_file(args.input_excel)
-            
             # Process output path: if it's just a filename, prepend default directory
             if os.path.dirname(args.output) == '':
                 # Just a filename, use default directory
                 args.output = os.path.join('./impact_results', args.output)
-            
             # Validate the parent directory
             output_dir = os.path.dirname(args.output)
             if output_dir:
                 validate_output_directory(output_dir)
-            
             if args.openalex_mailto:
                 validate_email(args.openalex_mailto)
             if not args.skip_scopus:
@@ -461,7 +458,6 @@ def main():
         except ValidationError as e:
             logger.error(f"Input validation error: {e}")
             sys.exit(1)
-
     except KeyboardInterrupt:
         print("\n⚠️  Operation cancelled by user\n")
         return 1
@@ -469,7 +465,7 @@ def main():
         print(f"\n❌ Error during initialization: {exc}\n")
         return 1
     
-    # Header
+# Header
     logger.info('''
 ################################################################################################
 #                                                                                              #
@@ -478,8 +474,7 @@ def main():
 #                                                                                              #
 ################################################################################################
 ''')    
-
-    # Configuration
+# Configuration
     print('''\n=============================
   ⚙️  CONFIGURATION SUMMARY
 =============================''')
@@ -493,7 +488,6 @@ def main():
     pyalex.config.data_version = args.openalex_data_version
     version_name = "Walden (new)" if args.openalex_data_version == 2 else "Classic (old)"
     logger.info(f"📊 OpenAlex data version: {args.openalex_data_version} ({version_name})")
-    
     if args.openalex_mailto:
         pyalex.config.mailto = args.openalex_mailto
         logger.info(f"📧 Email: {args.openalex_mailto}")
