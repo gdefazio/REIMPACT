@@ -23,7 +23,8 @@ from pybliometrics.scopus import (
 )
 from typing import List, Optional, Tuple, Dict
 from .utils.utils import (
-    setup_logging, 
+    setup_logging,
+    sanitize_filename, 
     validate_email,
     validate_output_directory,
     validate_api_key,
@@ -64,7 +65,6 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # COMMAND LINE ARGUMENT PARSING
 # ============================================================================
-
 def parse_arguments() -> argparse.Namespace:
     """
     Parse and validate command line arguments.
@@ -179,9 +179,8 @@ Examples:
     return args
 
 # ============================================================================
-# CLASS DEFIINITIONS
+# OPENALEX AUTHOR SEARCH
 # ============================================================================
-
 class OpenAlexAuthorSearch:
     """
     Search and disambiguate authors in OpenAlex database.
@@ -327,7 +326,6 @@ class OpenAlexAuthorSearch:
 # ============================================================================
 # SCOPUS AUTHOR SEARCH
 # ============================================================================
-
 class ScopusAuthorSuggestion:
     """
     Search and disambiguate authors in Scopus database.
@@ -379,21 +377,19 @@ class ScopusAuthorSuggestion:
                 first_token = tokens[0].replace(".", "").strip()
                 
                 if len(first_token) <= 2:
-                    # Likely an initial: "B Fosso" or "B. Fosso"
+                    # Likely an initial
                     first = first_token
                     last = tokens[1]
                 else:
-                    # Likely full first name: "Bruno Fosso"
+                    # Likely full first name
                     first = tokens[0]
                     last = tokens[1]
             else:
-                # Three or more tokens: "Bruno D. Fosso" or "Jean-Pierre Martin"
+                # Three or more tokens
                 # Strategy: Take first token as firstname, last token as surname
                 # Middle tokens are ignored for the query (Scopus limitation)
                 first = tokens[0]
                 last = tokens[-1]
-                
-                # Optional: If first token is very short, might be initial
                 first_cleaned = first.replace(".", "").strip()
                 if len(first_cleaned) <= 2:
                     first = first_cleaned
@@ -423,15 +419,13 @@ class ScopusAuthorSuggestion:
             logger.info("  3. Invalid API key or insufficient permissions")
             logger.info("Solution: Use --skip_scopus flag")
             return []
-        
-        # Try to get authors - may fail due to pybliometrics parsing issues
         try:
             authors = result.authors or []
         except AttributeError as exc:
             logger.error(f"pybliometrics parsing error: {exc}")
             logger.info("This may occur with certain data formats returned by Scopus API")
             return []
-        
+
         suggestions: List[dict] = []
         for author in authors:
             try:
@@ -439,7 +433,7 @@ class ScopusAuthorSuggestion:
                 orcid_formatted = None
                 if hasattr(author, 'orcid') and author.orcid: # type: ignore
                     # Remove brackets and format as URL
-                    orcid_clean = str(author.orcid).strip('[]').strip() # type: ignore # type: ignore
+                    orcid_clean = str(author.orcid).strip('[]').strip() # type: ignore
                     if orcid_clean and orcid_clean.lower() != 'none':
                         orcid_formatted = f"https://orcid.org/{orcid_clean}"
                 
@@ -451,15 +445,13 @@ class ScopusAuthorSuggestion:
                     "givenname": author.givenname if hasattr(author, 'givenname') else None, # type: ignore
                     "documents": author.documents if hasattr(author, 'documents') else 0, # type: ignore
                     "affiliation": author.affiliation if hasattr(author, 'affiliation') else None, # type: ignore
-                    "affiliation_id": author.affiliation_id if hasattr(author, 'affiliation_id') else None, # type: ignore # type: ignore
+                    "affiliation_id": author.affiliation_id if hasattr(author, 'affiliation_id') else None, # type: ignore
                     "city": author.city if hasattr(author, 'city') else None, # type: ignore
-                    "country": author.country if hasattr(author, 'country') else None, # type: ignore # type: ignore
-                })
-                
+                    "country": author.country if hasattr(author, 'country') else None, # type: ignore 
+                })    
             except Exception as exc:
                 logger.debug(f"Error processing Scopus author: {exc}")
                 continue
-                
             if len(suggestions) >= self.max_results:
                 break
         
@@ -507,8 +499,7 @@ class ScopusAuthorSuggestion:
                 choice = input("  👉 Select author(s) [1-{}] or press Enter to skip: ".format(len(candidates))).strip()
                 if choice == "":
                     print("")
-                    return None
-                
+                    return None 
                 # Determine separator: + for aggregation, , for separate results
                 if '+' in choice:
                     separator = '+'
@@ -516,7 +507,6 @@ class ScopusAuthorSuggestion:
                     separator = ','
                 else:
                     separator = None
-                
                 # Parse multiple selections
                 selected_indices = []
                 if separator:
@@ -532,8 +522,7 @@ class ScopusAuthorSuggestion:
                     if 0 <= idx < len(candidates):
                         selected_indices.append(idx)
                     else:
-                        raise ValueError(f"Invalid index: {idx+1}")
-                
+                        raise ValueError(f"Invalid index: {idx+1}")   
                 if selected_indices:
                     selected = [candidates[i] for i in selected_indices]
                     aggregate = (separator == '+')
@@ -547,27 +536,10 @@ class ScopusAuthorSuggestion:
             except ValueError:
                 print("  ❌ Invalid input. Use numbers separated by + or , (e.g., '1+3+5' or '1,3,5')")
 
-# ============================================================================
-# DOI RETRIEVAL FUNCTIONS
-# ============================================================================
-
-def sanitize_filename(name: str) -> str:
-    """
-    Sanitize author name for use in filename.
-    
-    Args:
-        name: Author name
-        
-    Returns:
-        Sanitized filename-safe string
-    """
-    return name.replace(',', '').replace(' ', '_').replace('.', '').strip()
 
 # ============================================================================
 # OPENALEX AUTHOR SEARCH
 # ============================================================================
-
-
 def fetch_author_dois_openalex(author_id: str, max_works: Optional[int] = None) -> List[str]:
     """
     Retrieve DOIs from OpenAlex for a given author.
