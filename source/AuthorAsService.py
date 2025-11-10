@@ -53,8 +53,7 @@ __all__ = [
     'fetch_author_dois_scopus',
     'process_single_author',
     'build_author_row',
-    'sanitize_doi',
-    'sanitize_filename',
+    'sanitize_doi'
 ]
 
 # =============================
@@ -248,7 +247,7 @@ class OpenAlexAuthorSearch:
         }
 
     @staticmethod
-    def interactive_select(candidates: List[dict]) -> Optional[List[dict]]:
+    def interactive_select(candidates: List[dict]) -> Optional[Tuple[List[dict], bool]]:
         """
         Interactive selection of author(s) from candidates with multi-selection support.
         
@@ -256,7 +255,8 @@ class OpenAlexAuthorSearch:
             candidates: List of author dictionaries
             
         Returns:
-            List of selected author dicts or None if cancelled
+            Tuple of (list of selected author dicts, aggregate flag) or None if cancelled
+            aggregate flag is True if '+' was used (merge DOIs), False otherwise
         """
         if not candidates:
             print("  ⚠️  No authors found on OpenAlex\n")
@@ -274,8 +274,9 @@ class OpenAlexAuthorSearch:
                 # f"        {candidate.get('orcid')}\n"
             )
         
-        print("  💡 Tip: Enter multiple numbers separated by commas (e.g., '1,3,5')")
-        print("           or a single number for one author\n")
+        print("  💡 Tip: Use + to aggregate results (e.g., '1+3+5' merges DOIs, removes duplicates)")
+        print("           Use , to keep separate (e.g., '1,3,5' creates separate rows)")
+        print("           Or enter a single number for one author\n")
         
         while True:
             try:
@@ -284,10 +285,26 @@ class OpenAlexAuthorSearch:
                     print("")
                     return None
                 
+                # Determine separator: + for aggregation, , for separate results
+                if '+' in choice:
+                    separator = '+'
+                elif ',' in choice:
+                    separator = ','
+                else:
+                    separator = None
+                
                 # Parse multiple selections
                 selected_indices = []
-                for part in choice.split(','):
-                    idx = int(part.strip()) - 1
+                if separator:
+                    for part in choice.split(separator):
+                        idx = int(part.strip()) - 1
+                        if 0 <= idx < len(candidates):
+                            selected_indices.append(idx)
+                        else:
+                            raise ValueError(f"Invalid index: {idx+1}")
+                else:
+                    # Single selection
+                    idx = int(choice.strip()) - 1
                     if 0 <= idx < len(candidates):
                         selected_indices.append(idx)
                     else:
@@ -295,12 +312,16 @@ class OpenAlexAuthorSearch:
                 
                 if selected_indices:
                     selected = [candidates[i] for i in selected_indices]
-                    print(f"\n  ✅ Selected {len(selected)} author(s)\n")
-                    return selected
+                    aggregate = (separator == '+')
+                    if aggregate:
+                        print(f"\n  ✅ Selected {len(selected)} author(s) - Results will be aggregated\n")
+                    else:
+                        print(f"\n  ✅ Selected {len(selected)} author(s)\n")
+                    return (selected, aggregate)
                 else:
                     print("  ❌ No valid selections. Try again.")
             except ValueError:
-                print("  ❌ Invalid input. Use numbers separated by commas (e.g., '1,3,5')")
+                print("  ❌ Invalid input. Use numbers separated by + or , (e.g., '1+3+5' or '1,3,5')")
 
 
 # ============================================================================
@@ -445,7 +466,7 @@ class ScopusAuthorSuggestion:
         return suggestions
 
     @staticmethod
-    def interactive_select(candidates: List[dict]) -> Optional[List[dict]]:
+    def interactive_select(candidates: List[dict]) -> Optional[Tuple[List[dict], bool]]:
         """
         Interactive selection of author(s) from Scopus candidates with multi-selection support.
         
@@ -453,7 +474,8 @@ class ScopusAuthorSuggestion:
             candidates: List of author dictionaries
             
         Returns:
-            List of selected author dicts or None if skipped
+            Tuple of (list of selected author dicts, aggregate flag) or None if skipped
+            aggregate flag is True if '+' was used (merge DOIs), False otherwise
         """
         if not candidates:
             print("  ⚠️  No Scopus candidates found\n")
@@ -476,8 +498,9 @@ class ScopusAuthorSuggestion:
                 # f"       {candidate.get('orcid')}\n"
             )
         
-        print("  💡 Tip: Enter multiple numbers separated by commas (e.g., '1,3,5')")
-        print("           or a single number for one author\n")
+        print("  💡 Tip: Use + to aggregate results (e.g., '1+3+5' merges DOIs, removes duplicates)")
+        print("           Use , to keep separate (e.g., '1,3,5' creates separate rows)")
+        print("           Or enter a single number for one author\n")
         
         while True:
             try:
@@ -486,10 +509,26 @@ class ScopusAuthorSuggestion:
                     print("")
                     return None
                 
+                # Determine separator: + for aggregation, , for separate results
+                if '+' in choice:
+                    separator = '+'
+                elif ',' in choice:
+                    separator = ','
+                else:
+                    separator = None
+                
                 # Parse multiple selections
                 selected_indices = []
-                for part in choice.split(','):
-                    idx = int(part.strip()) - 1
+                if separator:
+                    for part in choice.split(separator):
+                        idx = int(part.strip()) - 1
+                        if 0 <= idx < len(candidates):
+                            selected_indices.append(idx)
+                        else:
+                            raise ValueError(f"Invalid index: {idx+1}")
+                else:
+                    # Single selection
+                    idx = int(choice.strip()) - 1
                     if 0 <= idx < len(candidates):
                         selected_indices.append(idx)
                     else:
@@ -497,20 +536,20 @@ class ScopusAuthorSuggestion:
                 
                 if selected_indices:
                     selected = [candidates[i] for i in selected_indices]
-                    print(f"\n  ✅ Selected {len(selected)} author(s)\n")
-                    return selected
+                    aggregate = (separator == '+')
+                    if aggregate:
+                        print(f"\n  ✅ Selected {len(selected)} author(s) - Results will be aggregated\n")
+                    else:
+                        print(f"\n  ✅ Selected {len(selected)} author(s)\n")
+                    return (selected, aggregate)
                 else:
                     print("  ❌ No valid selections. Try again.")
             except ValueError:
-                print("  ❌ Invalid input. Use numbers separated by commas (e.g., '1,3,5')")
+                print("  ❌ Invalid input. Use numbers separated by + or , (e.g., '1+3+5' or '1,3,5')")
 
 # ============================================================================
 # DOI RETRIEVAL FUNCTIONS
 # ============================================================================
-
-
-
-
 
 def sanitize_filename(name: str) -> str:
     """
@@ -741,23 +780,54 @@ def process_single_author(
             oa_candidates = []
         
         if oa_candidates:
-            author_selections = OpenAlexAuthorSearch.interactive_select(oa_candidates)
+            selection_result = OpenAlexAuthorSearch.interactive_select(oa_candidates)
             
-            if author_selections:
-                # Process each selected author
-                for author_selection in author_selections:
-                    print(f"  ✅ Processing: {author_selection.get('display_name')} - {author_selection.get('last_known_institution', '')}")
-                    # Fetch DOIs
-                    author_id = author_selection.get('id', '')
-                    if author_id:
-                        print(f"  📥 Fetching DOIs from OpenAlex...")
-                        openalex_dois = fetch_author_dois_openalex(author_id, max_works=max_works)
-                        if openalex_dois:
-                            row = build_author_row(author_selection, openalex_dois, None, source="OpenAlex")
-                            openalex_rows.append(row)
-                            print(f"  ✅ Retrieved {len(openalex_dois)} DOIs\n")
-                        else:
-                            print(f"  ⚠️  No DOIs found\n")
+            if selection_result:
+                author_selections, aggregate = selection_result
+                
+                if aggregate:
+                    # Aggregate mode: merge all DOIs from selected authors
+                    print(f"  ✅ Aggregating {len(author_selections)} author(s)...")
+                    all_dois = set()
+                    author_names = []
+                    institutions = []
+                    
+                    for author_selection in author_selections:
+                        author_names.append(author_selection.get('display_name', 'Unknown'))
+                        inst = author_selection.get('last_known_institution', '')
+                        if inst:
+                            institutions.append(inst)
+                        
+                        author_id = author_selection.get('id', '')
+                        if author_id:
+                            openalex_dois = fetch_author_dois_openalex(author_id, max_works=max_works)
+                            all_dois.update(openalex_dois)
+                    
+                    if all_dois:
+                        # Create a single row with aggregated data - use only first author name
+                        aggregated_author = {
+                            'display_name': author_names[0] if author_names else 'Unknown',
+                            'last_known_institution': ' / '.join(institutions) if institutions else ''
+                        }
+                        row = build_author_row(aggregated_author, sorted(all_dois), None, source="OpenAlex")
+                        openalex_rows.append(row)
+                        print(f"  ✅ Aggregated {len(all_dois)} unique DOIs from {len(author_selections)} authors\n")
+                    else:
+                        print(f"  ⚠️  No DOIs found\n")
+                else:
+                    # Separate mode: create one row per author
+                    for author_selection in author_selections:
+                        print(f"  ✅ Processing: {author_selection.get('display_name')} - {author_selection.get('last_known_institution', '')}")
+                        author_id = author_selection.get('id', '')
+                        if author_id:
+                            print(f"  📥 Fetching DOIs from OpenAlex...")
+                            openalex_dois = fetch_author_dois_openalex(author_id, max_works=max_works)
+                            if openalex_dois:
+                                row = build_author_row(author_selection, openalex_dois, None, source="OpenAlex")
+                                openalex_rows.append(row)
+                                print(f"  ✅ Retrieved {len(openalex_dois)} DOIs\n")
+                            else:
+                                print(f"  ⚠️  No DOIs found\n")
             else:
                 print(f"  ⏭️  Skipped OpenAlex selection\n")
         else:
@@ -769,24 +839,63 @@ def process_single_author(
         try:
             scopus_suggestions = ScopusAuthorSuggestion().search(author_name)
             if scopus_suggestions:
-                scopus_selections = ScopusAuthorSuggestion.interactive_select(scopus_suggestions)
-                if scopus_selections:
-                    # Process each selected author
-                    for scopus_selection in scopus_selections:
-                        fullname = f"{scopus_selection.get('givenname')} {scopus_selection.get('surname')}".strip()
-                        print(f"  ✅ Processing: {fullname} - {scopus_selection.get('affiliation', '')}")
-                        # Fetch DOIs
-                        eid = scopus_selection.get('eid', '')
-                        if eid:
-                            print(f"  📥 Fetching DOIs from Scopus...")
-                            scopus_dois = fetch_author_dois_scopus(eid, max_works=max_works)
-                            if scopus_dois:
-                                author_dict = author_selections[0] if author_selections else {'display_name': fullname}
-                                row = build_author_row(author_dict, scopus_dois, scopus_selection, source="Scopus")
-                                scopus_rows.append(row)
-                                print(f"  ✅ Retrieved {len(scopus_dois)} DOIs\n")
-                            else:
-                                print(f"  ⚠️  No DOIs found\n")
+                selection_result = ScopusAuthorSuggestion.interactive_select(scopus_suggestions)
+                if selection_result:
+                    scopus_selections, aggregate = selection_result
+                    
+                    if aggregate:
+                        # Aggregate mode: merge all DOIs from selected authors
+                        print(f"  ✅ Aggregating {len(scopus_selections)} author(s)...")
+                        all_dois = set()
+                        author_names = []
+                        affiliations = []
+                        
+                        for scopus_selection in scopus_selections:
+                            surname = scopus_selection.get('surname', '')
+                            givenname = scopus_selection.get('givenname', '')
+                            fullname = f"{givenname} {surname}".strip()
+                            author_names.append(fullname)
+                            
+                            affil = scopus_selection.get('affiliation', '')
+                            if affil:
+                                affiliations.append(affil)
+                            
+                            eid = scopus_selection.get('eid', '')
+                            if eid:
+                                scopus_dois = fetch_author_dois_scopus(eid, max_works=max_works)
+                                all_dois.update(scopus_dois)
+                        
+                        if all_dois:
+                            # Create a single row with aggregated data - use only first author name
+                            aggregated_author = {
+                                'display_name': author_names[0] if author_names else 'Unknown'
+                            }
+                            aggregated_scopus = {
+                                'surname': scopus_selections[0].get('surname', ''),
+                                'givenname': scopus_selections[0].get('givenname', ''),
+                                'affiliation': ' / '.join(affiliations) if affiliations else ''
+                            }
+                            row = build_author_row(aggregated_author, sorted(all_dois), aggregated_scopus, source="Scopus")
+                            scopus_rows.append(row)
+                            print(f"  ✅ Aggregated {len(all_dois)} unique DOIs from {len(scopus_selections)} authors\n")
+                        else:
+                            print(f"  ⚠️  No DOIs found\n")
+                    else:
+                        # Separate mode: create one row per author
+                        for scopus_selection in scopus_selections:
+                            fullname = f"{scopus_selection.get('givenname')} {scopus_selection.get('surname')}".strip()
+                            print(f"  ✅ Processing: {fullname} - {scopus_selection.get('affiliation', '')}")
+                            eid = scopus_selection.get('eid', '')
+                            if eid:
+                                print(f"  📥 Fetching DOIs from Scopus...")
+                                scopus_dois = fetch_author_dois_scopus(eid, max_works=max_works)
+                                if scopus_dois:
+                                    author_dict = author_selections[0] if author_selections else {'display_name': fullname}
+                                    row = build_author_row(author_dict, scopus_dois, scopus_selection, source="Scopus")
+                                    scopus_rows.append(row)
+                                    print(f"  ✅ Retrieved {len(scopus_dois)} DOIs\n")
+                                else:
+                                    print(f"  ⚠️  No DOIs found\n")
                 else:
                     print(f"  ⏭️  Skipped Scopus selection\n")
             else:

@@ -42,6 +42,13 @@ except ImportError:
 # =============================
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "choose_search_databases",
+    "OpenAlexDoi",
+    "OpenAlexService",
+    "MyCitationOverview",
+    "MyCitationOverviewChunked"
+]
 # =============================
 # ARGUMENT PARSING
 # =============================
