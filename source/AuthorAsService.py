@@ -136,11 +136,11 @@ Examples:
     # Output and behavior
     output_group = parser.add_argument_group('Output & Behavior')
     output_group.add_argument(
-        "-o", "--output_directory",
+        "-o", "--output",
         type=str,
-        default="./authors_results",
-        help="Output directory for Excel files (default: ./authors_results)",
-        metavar="DIR"
+        default=None,
+        help="Output Excel file name or full path. If not specified, uses 'AuthorName_DOIs_Source.xlsx' in ./authors_results/",
+        metavar="FILE"
     )
     output_group.add_argument(
         "-M", "--max_works",
@@ -851,13 +851,17 @@ def main():
                 print(f"  ❌ {e}\n")
                 return 1
         
-        # Validate output directory
-        try:
-            validate_output_directory(options.output_directory)
-            logger.debug(f"✅ Output directory valid: {options.output_directory}")
-        except ValidationError as e:
-            print(f"  ❌ {e}\n")
-            return 1
+        # Validate output path (only if specified)
+        if options.output:
+            # If just a filename, will be handled later
+            output_dir_to_validate = os.path.dirname(options.output)
+            if output_dir_to_validate:  # Has a directory component
+                try:
+                    validate_output_directory(output_dir_to_validate)
+                    logger.debug(f"✅ Output directory valid: {output_dir_to_validate}")
+                except ValidationError as e:
+                    print(f"  ❌ {e}\n")
+                    return 1
         
         # Validate max_works
         try:
@@ -884,7 +888,9 @@ def main():
     print(f"{' '*30}Powered by ELIXIR-IIB")
     print("="*80 + "\n")
     
-    output_dir = options.output_directory
+    # Determine output directory
+    default_output_dir = './authors_results'
+    
     alex_key = options.openalex_key
     mailto = options.openalex_mailto
     scopus_key = options.scopus_key
@@ -892,8 +898,6 @@ def main():
     input_authors = options.input_authors
     max_works = options.max_works
     skip_scopus_author = options.skip_scopus
-    
-    os.makedirs(output_dir, exist_ok=True)
 
     # OpenAlex configuration
     print('''\n==============================
@@ -972,7 +976,8 @@ def main():
     print("="*40)
     print("  ⚙️  CONFIGURATION SUMMARY")
     print("="*40)
-    print(f"  📂 Output: {output_dir}")
+    output_display = options.output if options.output else f"{default_output_dir}/<author>_DOIs_<source>.xlsx"
+    print(f"  📂 Output: {output_display}")
     print(f"  👥 Authors: {len(authors_to_process)}")
     print(f"  🔍 OpenAlex: {'✅' if search_config['openalex'] else '❌'}")
     print(f"  🔍 Scopus: {'✅' if search_config['scopus'] else '❌'}")
@@ -1009,16 +1014,40 @@ def main():
     print(f"  📖 Scopus: {len(scopus_rows)} authors")
     print(f"{'='*40}\n")
 
-    # Determine filename prefix
+    # Determine base filename
     if len(authors_to_process) == 1:
-        filename_prefix = sanitize_filename(authors_to_process[0])
+        base_filename = sanitize_filename(authors_to_process[0])
     else:
-        filename_prefix = 'Authors'
+        base_filename = 'Authors'
+    
+    # Prepare output paths
+    def prepare_output_path(base_name: str, source: str) -> str:
+        """Prepare output file path based on user input or default."""
+        default_filename = f'{base_name}_DOIs_{source}.xlsx'
+        
+        if options.output:
+            # User specified output
+            output_dir = os.path.dirname(options.output)
+            if output_dir:
+                # Full path specified
+                # Extract base name and replace source
+                base_output = os.path.splitext(os.path.basename(options.output))[0]
+                return os.path.join(output_dir, f'{base_output}_{source}.xlsx')
+            else:
+                # Just filename, use default directory
+                base_output = os.path.splitext(options.output)[0]
+                return os.path.join(default_output_dir, f'{base_output}_{source}.xlsx')
+        else:
+            # No output specified, use default
+            return os.path.join(default_output_dir, default_filename)
     
     # Save OpenAlex results
     if openalex_rows:
         df_openalex = pd.DataFrame(openalex_rows)
-        openalex_file = os.path.join(output_dir, f'{filename_prefix}_DOIs_OpenAlex.xlsx')
+        openalex_file = prepare_output_path(base_filename, 'OpenAlex')
+        
+        # Create directory if needed
+        os.makedirs(os.path.dirname(openalex_file), exist_ok=True)
         df_openalex.to_excel(openalex_file, index=False, engine='openpyxl')
         
         total_dois = sum(
@@ -1034,7 +1063,10 @@ def main():
     # Save Scopus results
     if scopus_rows:
         df_scopus = pd.DataFrame(scopus_rows)
-        scopus_file = os.path.join(output_dir, f'{filename_prefix}_DOIs_Scopus.xlsx')
+        scopus_file = prepare_output_path(base_filename, 'Scopus')
+        
+        # Create directory if needed
+        os.makedirs(os.path.dirname(scopus_file), exist_ok=True)
         df_scopus.to_excel(scopus_file, index=False, engine='openpyxl')
         
         total_dois = sum(

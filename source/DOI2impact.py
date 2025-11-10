@@ -80,9 +80,9 @@ Examples:
     output_group.add_argument(
         "-o", "--output",
         type=str,
-        default="./impact_results",
-        help="Output directory (default: ./impact_results)",
-        metavar="DIR"
+        default="ELIXIR.IT_IMPACT.xlsx",
+        help="Output Excel file name or full path (default: ELIXIR.IT_IMPACT.xlsx in ./impact_results/)",
+        metavar="FILE"
     )
 
     # API configuration
@@ -432,7 +432,17 @@ def main():
         # Validate inputs
         try:
             validate_file(args.input_excel)
-            validate_output_directory(args.output)
+            
+            # Process output path: if it's just a filename, prepend default directory
+            if os.path.dirname(args.output) == '':
+                # Just a filename, use default directory
+                args.output = os.path.join('./impact_results', args.output)
+            
+            # Validate the parent directory
+            output_dir = os.path.dirname(args.output)
+            if output_dir:
+                validate_output_directory(output_dir)
+            
             if args.openalex_mailto:
                 validate_email(args.openalex_mailto)
             if not args.skip_scopus:
@@ -499,7 +509,7 @@ def main():
         except Exception as exc:
             logger.error(f"❌ Scopus configuration failed: {exc}")    
     logger.info(f"📄 Input excel file: {args.input_excel}")
-    logger.info(f"📁 Output directory: {args.output}")
+    logger.info(f"📁 Output file: {args.output}")
 
     # Load input
     try:
@@ -600,16 +610,17 @@ def main():
         src['PyBlioCitations'] = np.nan
 
     logger.info('\n🗃️  Starting overall data storage...')
-    # Create output directory if it doesn't exist
-    os.makedirs(args.output, exist_ok=True)
+    # Create output directory from the file path
+    output_dir = os.path.dirname(args.output)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
     
     # If Scopus failed, drop the column if present
     if scopus_failed and 'PyBlioCitations' in src.columns:
         src = src.drop(columns=['PyBlioCitations'])
     
-    # Write Excel file in the output directory
-    output_file = os.path.join(args.output, 'ELIXIR.IT_IMPACT.xlsx')
-    with pd.ExcelWriter(output_file) as buf:
+    # Write Excel file
+    with pd.ExcelWriter(args.output) as buf:
         src.to_excel(buf, sheet_name='summary')
         if not institutions.empty:
             institutions.to_excel(buf, sheet_name='institutions')
@@ -617,9 +628,9 @@ def main():
             institutionsOfCitings.to_excel(buf, sheet_name='institutionsOfCitings')
     
     logger.info('\n🗃️  Starting service-specific data storage...')
-    # Create services directory inside the output directory
-    dir_services = os.path.join(args.output, "services")
-    os.makedirs(dir_services, exist_ok=True)
+    # Create services directory in the same directory as the output file
+    services_dir = os.path.join(output_dir if output_dir else '.', "services")
+    os.makedirs(services_dir, exist_ok=True)
     for k, df in OpenAlexServiceDict.items():
         if df is None:
             logger.warning(f"Skipping {k} (failed during retrieval)")
@@ -637,7 +648,7 @@ def main():
         else:
             aux = df.mgd_citby_year
         aux.fillna(0, inplace=True)
-        aux.to_csv(os.path.join(dir_services, re.sub(r"[/@)(]", "_", k) + ".csv"))
+        aux.to_csv(os.path.join(services_dir, re.sub(r"[/@)(]", "_", k) + ".csv"))
     logger.info('\n✅ Finished...Good bye 👋')
 
     return 0
