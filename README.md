@@ -88,7 +88,7 @@ elixir-author-search \
 ```bash
 elixir-doi-impact \
   -i authors_results/Authors_DOIs_OpenAlex.xlsx \
-  -o output_impact/ \
+  -o output_impact/output_file.xlsx \
   --openalex_mailto your.email@domain.com \
   --scopus_key YOUR_SCOPUS_KEY
 ```
@@ -97,7 +97,7 @@ elixir-doi-impact \
 ```bash
 elixir-doi-impact \
   -i test/services_template.xlsx \
-  -o output_impact/ \
+  -o output_impact/output_file.xlsx \
   --openalex_mailto your.email@domain.com
 ```
 
