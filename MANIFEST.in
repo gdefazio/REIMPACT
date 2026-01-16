@@ -1,0 +1,21 @@
+# Include documentation and metadata files
+include README.md
+include LICENSE
+include requirements.txt
+include environment.yml
+
+# Include documentation
+recursive-include docs *.md
+
+# Include test files
+recursive-include test *.py *.xlsx
+
+# Exclude compiled Python files
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude *.pyo
+global-exclude *.pyd
+global-exclude .DS_Store
+
+# Exclude git files
+global-exclude .git*
