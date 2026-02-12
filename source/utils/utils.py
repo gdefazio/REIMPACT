@@ -1,5 +1,6 @@
 import os
 import re
+import requests
 import logging
 import pandas as pd
 import sys
@@ -265,8 +266,29 @@ def validate_api_key(api_key: Optional[str], key_name: str = "API key") -> bool:
     # Check for suspicious patterns
     if api_key.lower() in ['your_key_here', 'api_key', 'key', 'none', 'null']:
         raise ValidationError(f"{key_name} appears to be a placeholder value")
-    
-    return True
+
+    # Check for real API call
+    url = "https://api.elsevier.com/content/search/scopus"
+    headers = {
+        "X-ELS-APIKey": api_key,
+        "Accept": "application/json"
+
+    }
+    params = {
+        "query": "TITLE(test)",
+        "count": 1
+    }
+
+    response = requests.get(url, headers=headers, params=params)
+
+    if response.status_code == 200:
+        return True
+    elif response.status_code == 401:
+        raise ValidationError("APIkey verification: code 401 - invalid key")
+    elif response.status_code == 402:
+        raise ValidationError("APIkey verification: code 402 - valid key without permission")
+    else:
+        raise ValidationError(f"APIkey verification: code {response.status_code}")
 
 
 def validate_author_name(author_name: str) -> bool:

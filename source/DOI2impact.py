@@ -442,7 +442,11 @@ def main():
             # Process output path: if it's just a filename, prepend default directory
             if os.path.dirname(args.output) == '':
                 # Just a filename, use default directory
-                args.output = os.path.join('./impact_results', args.output)
+                args.output = os.path.join('./impact_results', "%s.xlsx" % args.output)
+            elif args.output.endswith('.xlsx') is False:
+                args.output = "%s.xlsx" % args.output
+            else:
+                raise NotImplementedError("Not implemented case for output arg %s" % args.output)
             # Validate the parent directory
             output_dir = os.path.dirname(args.output)
             if output_dir:
