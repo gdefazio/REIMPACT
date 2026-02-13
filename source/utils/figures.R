@@ -90,3 +90,7 @@ ggplot(world_data) +
   geom_sf(aes(fill = Freq)) +
   scale_fill_viridis_c(option = "plasma", na.value = "grey90") +
   theme_minimal()
+
+#### FIGURE 4 ####
+w.citofcit = read.xlsx(exdir, sheet = 3)
+table(w.citofcit$doiOfCiting)
