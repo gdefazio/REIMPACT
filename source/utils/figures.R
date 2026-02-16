@@ -92,5 +92,44 @@ ggplot(world_data) +
   theme_minimal()
 
 #### FIGURE 4 ####
-w.citofcit = read.xlsx(exdir, sheet = 3)
-table(w.citofcit$doiOfCiting)
+w.citofcit = read.xlsx(exdir, sheet = 3, cols = c(2:7))
+w.citofcit = w.citofcit[!duplicated(w.citofcit) & !is.na(w.citofcit$institution),]
+w.citofcit = data.frame(table(w.citofcit$country))
+colnames(w.citofcit)[1] = "iso_a2"
+
+world_data <- world %>%
+  left_join(w.citofcit, by = "iso_a2")
+
+ggplot(world_data) +
+  geom_sf(aes(fill = Freq)) +
+  scale_fill_viridis_c(option = "plasma", na.value = "grey90") +
+  theme_minimal()
+
+#### FIGURE 5 ####
+
+library(circlize)
+c.data = read.xlsx(exdir, sheet = 2)#, cols = c(2,3,4))
+c.data = c.data[!is.na(c.data$institution),]
+dois = unique(c.data$doi[!is.na(c.data$doi)])
+combn_ = function(doi_){
+  ists = c.data$institution[c.data$doi == doi_]
+  if (length(ists) >= 2){
+  comb = data.frame(t(combn(ists,2)))
+  colnames(comb) = c('from','to')
+  return(comb)
+  }
+}
+
+a = lapply(dois,combn_)
+n = Filter(Negate(is.null), a)
+b = bind_rows(Filter(Negate(is.null), a))
+b$weight = 1
+b = b[!duplicated(b),]
+chordDiagram(b, annotationTrack = "grid", 
+             preAllocateTracks = list(track.height = max(strwidth(unlist(dimnames(b))))))
+circos.track(track.index = 1, panel.fun = function(x, y) {
+  circos.text(CELL_META$xcenter, CELL_META$ylim[1], CELL_META$sector.index, 
+              facing = "clockwise", cex=.5, niceFacing = TRUE, adj = c(0, 0.5))
+}, bg.border = NA)
+
+
