@@ -83,8 +83,8 @@ Examples:
         """
     )
     
-    # Input options
-    input_group = parser.add_argument_group('Input Options')
+    # Input options (mutually exclusive, at least one required)
+    input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument(
         "-a", "--author",
         type=str,
@@ -97,15 +97,16 @@ Examples:
         help="Excel file with authors (one per row, column 'Author' or first column)",
         metavar="FILE"
     )
-    
+
     # API configuration
     api_group = parser.add_argument_group('API Configuration')
     api_group.add_argument(
-        "--openalex_key",
+        "-k", "--openalex_key",
         type=str,
+        required=True,
         default=os.getenv('OPENALEX_API_KEY'),
         help="OpenAlex API key (required, or set OPENALEX_API_KEY env var)",
-        metavar="KEY"
+        metavar="OPENALEX_API_KEY"
     )
     api_group.add_argument(
         "--openalex_data_version",
@@ -120,7 +121,7 @@ Examples:
         type=str,
         default=os.getenv('SCOPUS_API_KEY'),
         help="Scopus API key for pybliometrics. Can also set SCOPUS_API_KEY env var",
-        metavar="KEY"
+        metavar="SCOPUS_API_KEY"
     )
     
     # Output and behavior
@@ -137,7 +138,7 @@ Examples:
         type=int,
         default=None,
         help="Maximum works per author (default: all available)",
-        metavar="N"
+        metavar="N_WORKS"
     )
     output_group.add_argument(
         "--skip_scopus",
@@ -161,12 +162,7 @@ Examples:
         argcomplete.autocomplete(parser) # type: ignore
     args = parser.parse_args()
     
-    # Validation
-    if not args.author and not args.input_authors:
-        parser.error("Must provide either --author or --input_authors")
-    if args.author and args.input_authors:
-        parser.error("Cannot use both --author and --input_authors")
-    
+    # No need for manual validation: mutually exclusive group enforces requirement
     return args
 
 # ============================================================================

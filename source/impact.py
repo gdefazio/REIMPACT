@@ -94,11 +94,12 @@ Examples:
     # API configuration
     api_group = parser.add_argument_group('API Configuration')
     api_group.add_argument(
-        "-a", "--openalex_key",
+        "-k", "--openalex_key",
         type=str,
+        required=True,
         default=os.getenv('OPENALEX_API_KEY'),
         help="OpenAlex API key (required, or set OPENALEX_API_KEY env var)",
-        metavar="KEY"
+        metavar="OPENALEX_API_KEY"
     )
     api_group.add_argument(
         "--openalex_data_version",
@@ -113,7 +114,7 @@ Examples:
         type=str,
         default=os.getenv('SCOPUS_API_KEY'),
         help="Scopus API key for pybliometrics. Can also set SCOPUS_API_KEY env var",
-        metavar="KEY"
+        metavar="SCOPUS_API_KEY"
     )
 
     # Behavior
