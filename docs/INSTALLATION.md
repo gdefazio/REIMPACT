@@ -1,4 +1,4 @@
-# Installation Guide - ELIXIR.IT_IMPACT
+# Installation Guide - REIMPACT
 
 ## Quick Installation
 
@@ -14,8 +14,8 @@
 
 ### Step 1: Clone the Repository
 ```bash
-git clone https://github.com/gdefazio/ELIXIR.IT_IMPACT.git
-cd ELIXIR.IT_IMPACT
+git clone https://github.com/gdefazio/REIMPACT.git
+cd REIMPACT
 ```
 
 ### Step 2: Create and Activate Environment
@@ -26,18 +26,18 @@ cd ELIXIR.IT_IMPACT
 conda env create -f environment.yml
 
 # Activate environment
-conda activate elixir_impact
+conda activate reimpact
 ```
 
 #### Option B: Manual Conda Setup
 ```bash
 # Create new environment
-conda create -n elixir_impact python=3.11 -y
+conda create -n reimpact python=3.11 -y
 
 # Activate environment
-conda activate elixir_impact
+conda activate reimpact
 
-# Install pybliometrics from gdefazio channel (CRITICAL)
+# Install pybliometrics from gdefazio channel
 conda install -c gdefazio pybliometrics -y
 
 # Install other dependencies
@@ -59,17 +59,17 @@ pip install .
 
 This will:
 - Install all Python dependencies
-- Create command-line tools: `elixir-author-search` and `elixir-doi-impact`
+- Create command-line tools: `reimpact-author-search` and `reimpact-impact`
 - Make the package importable as a Python library
 
 ### Step 4: Verify Installation
 ```bash
 # Check package version
-pip show elixir-impact
+pip show reimpact
 
 # Test CLI commands
-elixir-author-search --help
-elixir-doi-impact --help
+reimpact-author-search --help
+reimpact-impact --help
 
 # Test Python imports
 python -c "from source import OpenAlexAuthorSearch; print('✅ Package installed successfully')"
@@ -87,12 +87,12 @@ The package provides two commands:
 
 ```bash
 # Search for author DOIs
-elixir-author-search -a "Author Name" \
+reimpact-author-search -a "Author Name" \
   --openalex_mailto your.email@domain.com \
   --scopus_key YOUR_SCOPUS_KEY
 
 # Analyze impact from DOIs
-elixir-doi-impact -i input.xlsx \
+reimpact-impact -i input.xlsx \
   --openalex_mailto your.email@domain.com \
   --scopus_key YOUR_SCOPUS_KEY
 ```
@@ -126,7 +126,7 @@ candidates = searcher.search("Author Name")
 
 You can also pass these as command-line arguments:
 ```bash
-elixir-author-search --openalex_key YOUR_KEY --openalex_mailto your.email@domain.com
+reimpact-author-search --openalex_key YOUR_KEY --openalex_mailto your.email@domain.com
 ```
 
 ### Scopus API
@@ -138,7 +138,7 @@ export SCOPUS_API_KEY="your_scopus_key"
 
 Or pass as command-line argument:
 ```bash
-elixir-author-search --scopus_key YOUR_SCOPUS_KEY 
+reimpact-author-search --scopus_key YOUR_SCOPUS_KEY 
 ```
 
 **⚠️ Important: Requires API Key + Authorization**
@@ -148,52 +148,52 @@ See [API_SETUP](API_SETUP.md) for detailed instructions.
 
 ## Package Commands Reference
 
-### `elixir-author-search`
+### `reimpact-author-search`
 
 Search for authors and retrieve their publication DOIs.
 
 **Basic usage:**
 ```bash
 # Single author
-elixir-author-search -a "Author Name" -m email@domain.com -s SCOPUS_KEY
+reimpact-author-search -a "Author Name" -m email@domain.com -s SCOPUS_KEY
 
 # Multiple authors from file
-elixir-author-search -i authors.xlsx -m email@domain.com -s SCOPUS_KEY
+reimpact-author-search -i authors.xlsx -m email@domain.com -s SCOPUS_KEY
 
 # Limit number of works per author
-elixir-author-search -a "Author Name" -m email@domain.com -M 50
+reimpact-author-search -a "Author Name" -m email@domain.com -M 50
 
 # Skip Scopus (OpenAlex only)
-elixir-author-search -a "Author Name" -m email@domain.com --skip_scopus
+reimpact-author-search -a "Author Name" -m email@domain.com --skip_scopus
 
 # Verbose output with log file
-elixir-author-search -a "Author Name" -m email@domain.com -v --log_file output.log
+reimpact-author-search -a "Author Name" -m email@domain.com -v --log_file output.log
 ```
 
 **Help:**
 ```bash
-elixir-author-search --help
+reimpact-author-search --help
 ```
 
-### `elixir-doi-impact`
+### `reimpact-impact`
 
 Analyze bibliometric impact from a list of DOIs.
 
 **Basic usage:**
 ```bash
 # Analyze impact from file
-elixir-doi-impact -i input.xlsx -o output_dir/ -m email@domain.com -s SCOPUS_KEY
+reimpact-impact -i input.xlsx -o output_dir/ -m email@domain.com -s SCOPUS_KEY
 
 # OpenAlex only (skip Scopus)
-elixir-doi-impact -i input.xlsx -o output_dir/ -m email@domain.com --skip_scopus
+reimpact-impact -i input.xlsx -o output_dir/ -m email@domain.com --skip_scopus
 
 # With verbose logging
-elixir-doi-impact -i input.xlsx -o output_dir/ -m email@domain.com -v
+reimpact-impact -i input.xlsx -o output_dir/ -m email@domain.com -v
 ```
 
 **Help:**
 ```bash
-elixir-doi-impact --help
+reimpact-impact --help
 ```
 
 ---
@@ -204,11 +204,11 @@ To remove the package and environment:
 
 ```bash
 # Uninstall package
-pip uninstall elixir-impact
+pip uninstall reimpact
 
 # Remove conda environment
 conda deactivate
-conda env remove -n elixir_impact
+conda env remove -n reimpact
 ```
 
 ---
@@ -219,7 +219,7 @@ To update to the latest version:
 
 ```bash
 # Navigate to repository
-cd ELIXIR.IT_IMPACT
+cd REIMPACT
 
 # Pull latest changes
 git pull origin main
@@ -242,12 +242,12 @@ pip install . --upgrade
 conda install -c gdefazio pybliometrics -y --force-reinstall
 ```
 
-#### 2. Command Not Found: `elixir-author-search`
+#### 2. Command Not Found: `reimpact-author-search`
 **Problem:** CLI commands not available after installation.
 
 **Solution:** 
 - Make sure you ran `pip install -e .` in the repository directory
-- Verify installation: `pip show elixir-impact`
+- Verify installation: `pip show reimpact`
 - Restart your terminal/shell
 
 #### 3. Import Errors
@@ -255,7 +255,7 @@ conda install -c gdefazio pybliometrics -y --force-reinstall
 
 **Solution:**
 - Ensure package is installed: `pip install -e .`
-- Check you're in the correct conda environment: `conda activate elixir_impact`
+- Check you're in the correct conda environment: `conda activate reimpact`
 
 #### 4. API Key Issues
 **Problem:** "API key required" or authentication errors.
@@ -271,7 +271,7 @@ conda install -c gdefazio pybliometrics -y --force-reinstall
 **Solution:**
 ```bash
 # Use --skip_scopus flag to use OpenAlex only
-elixir-author-search -a "Author" -m email@domain.com --skip_scopus
+reimpact-author-search -a "Author" -m email@domain.com --skip_scopus
 ```
 
 #### 6. Excel File Errors
@@ -299,7 +299,7 @@ elixir-author-search -a "Author" -m email@domain.com --skip_scopus
 
 - [API Setup Guide](API_SETUP.md) - Detailed API configuration
 - [README.md](../README.md) - Package overview and usage examples
-- [GitHub Repository](https://github.com/gdefazio/ELIXIR.IT_IMPACT) - Source code and issues
+- [GitHub Repository](https://github.com/gdefazio/REIMPACT) - Source code and issues
 
 ---
 
@@ -307,7 +307,7 @@ elixir-author-search -a "Author" -m email@domain.com --skip_scopus
 
 If you encounter issues not covered here:
 
-1. Check the [GitHub Issues](https://github.com/gdefazio/ELIXIR.IT_IMPACT/issues)
+1. Check the [GitHub Issues](https://github.com/gdefazio/REIMPACT/issues)
 2. Review the documentation in [docs/](.)
 3. Contact the authors:
    - Giuseppe Defazio: giuseppe.defazio@uniba.it

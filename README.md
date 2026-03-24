@@ -1,4 +1,4 @@
-# ELIXIR.IT_IMPACT - Bibliometric Impact Assessment
+# REIMPACT - Research infrastructure Evaluation tool for IMPACT
 
 [![Python](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -29,12 +29,12 @@ Python package for bibliometric assessment of ELIXIR services and authors, based
 ### Installation
 ```bash
 # Clone the repository
-git clone https://github.com/gdefazio/ELIXIR.IT_IMPACT.git
-cd ELIXIR.IT_IMPACT
+git clone https://github.com/gdefazio/REIMPACT.git
+cd REIMPACT
 
 # Create and activate conda environment
 conda env create -f environment.yml
-conda activate elixir_impact
+conda activate reimpact
 
 # Install the package
 pip install .
@@ -51,15 +51,15 @@ See [INSTALLATION](docs/INSTALLATION.md) for detailed instructions.
    ```bash
    elixir-author-search \
      --input_authors test/authors_template.xlsx \
-     --openalex_mailto your.email@domain.com \
+    --openalex_key YOUR_OPENALEX_API_KEY \
      --scopus_key YOUR_SCOPUS_KEY
    ```
 
 2. **Impact Assessment via DOI**
    ```bash
    elixir-doi-impact \
-     -i authors_results/Authors_DOIs_OpenAlex.xlsx \
-     --openalex_mailto your.email@domain.com \
+     --input_excel authors_results/Authors_DOIs_OpenAlex.xlsx \
+     --openalex_key YOUR_OPENALEX_API_KEY \
      --scopus_key YOUR_SCOPUS_KEY
    ```
 
@@ -71,8 +71,8 @@ See [INSTALLATION](docs/INSTALLATION.md) for detailed instructions.
 ### Search DOIs for a Single Author
 ```bash
 elixir-author-search \
-  -a "Mario Rossi" \
-  --openalex_mailto your.email@domain.com \
+  --author "Mario Rossi" \
+  --openalex_key YOUR_OPENALEX_API_KEY \
   --scopus_key YOUR_SCOPUS_KEY
 ```
 
@@ -80,39 +80,39 @@ elixir-author-search \
 ```bash
 elixir-author-search \
   --input_authors test/authors_template.xlsx \
-  --openalex_mailto your.email@domain.com \
+  --openalex_key YOUR_OPENALEX_API_KEY \
   --scopus_key YOUR_SCOPUS_KEY
 ```
 
 ### Impact Assessment from Authors DOI File
 ```bash
 elixir-doi-impact \
-  -i authors_results/Authors_DOIs_OpenAlex.xlsx \
-  -o output_impact/output_file.xlsx \
-  --openalex_mailto your.email@domain.com \
+  --input_excel authors_results/Authors_DOIs_OpenAlex.xlsx \
+  --output output_impact/output_file.xlsx \
+  --openalex_key YOUR_OPENALEX_API_KEY \
   --scopus_key YOUR_SCOPUS_KEY
 ```
 
 ### Impact Assessment from Services DOI File
 ```bash
 elixir-doi-impact \
-  -i test/services_template.xlsx \
-  -o output_impact/output_file.xlsx \
-  --openalex_mailto your.email@domain.com
+  --input_excel test/services_template.xlsx \
+  --output output_impact/output_file.xlsx \
+  --openalex_key YOUR_OPENALEX_API_KEY
 ```
 
 ### Using as Python Library
 ```python
 from source import OpenAlexAuthorSearch, fetch_author_dois_openalex
 
-# Search for authors
-searcher = OpenAlexAuthorSearch(mailto="your.email@domain.com")
+# Search for authors (API key required)
+searcher = OpenAlexAuthorSearch(api_key="YOUR_OPENALEX_API_KEY")
 candidates = searcher.search("Mario Rossi")
 
 # Fetch DOIs
 if candidates:
     author_id = candidates[0]['id']
-    dois = fetch_author_dois_openalex(author_id, max_works=50)
+    dois = fetch_author_dois_openalex(author_id, max_works=50, api_key="YOUR_OPENALEX_API_KEY")
     print(f"Found {len(dois)} DOIs")
 ```
 
@@ -120,14 +120,15 @@ if candidates:
 
 ## Input File Format
 
-### For AuthorAsService
+
+### For author-search module
 Excel file with a column "Author" (or similar):
 | Author        |
 |---------------|
 | Mario Rossi   |
 | Anna Bianchi  |
 
-### For DOIs2impact
+### For impact module
 Excel file with at least a column "Primary doi first then others" (or "DOI"):
 | Service      | Applicant          | Platform     | Primary doi first then others     |
 |--------------|--------------------|--------------|-----------------------------------|
@@ -140,8 +141,7 @@ Excel file with at least a column "Primary doi first then others" (or "DOI"):
 Instead of passing API keys as arguments, you can set environment variables:
 
 ```bash
-export OPENALEX_API_KEY="your_openalex_key"        # Optional: for 100k req/day
-export OPENALEX_MAILTO="your.email@domain.com"     # Required if no API key
+export OPENALEX_API_KEY="your_openalex_key"        # Required: for 100k cred/day
 export SCOPUS_API_KEY="your_scopus_key"            # Required for Scopus access
 ```
 
@@ -150,11 +150,11 @@ export SCOPUS_API_KEY="your_scopus_key"            # Required for Scopus access
 ## Package Structure
 
 ```
-ELIXIR.IT_IMPACT/
+REIMPACT/
 ├── source/
 │   ├── __init__.py              # Package initialization
-│   ├── AuthorAsService.py       # Author DOI search module
-│   ├── DOI2impact.py            # Impact assessment module
+│   ├── author-search.py         # Author DOI search module
+│   ├── impact.py                # Impact assessment module
 │   └── utils/
 │       ├── __init__.py
 │       ├── utils.py               # Validation and logging utilities
@@ -222,6 +222,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Support
 
 For issues or questions:
-- Open an issue on [GitHub](https://github.com/gdefazio/ELIXIR.IT_IMPACT/issues)
+- Open an issue on [GitHub](https://github.com/gdefazio/REIMPACT/issues)
 - Check the documentation in [docs/](docs/)
 - Contact the authors via email

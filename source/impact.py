@@ -23,11 +23,11 @@ import requests
 from collections import deque
 from .utils.utils import (
     setup_logging,
-    validate_email,
     validate_file,
     validate_output_directory,
-    validate_api_key,
     sanitize_doi,
+    get_available_databases,
+    choose_search_databases,
     ValidationError
 )
 # Optional dependency
@@ -43,7 +43,6 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "choose_search_databases",
     "OpenAlexDoi",
     "OpenAlexService",
     "MyCitationOverview",
@@ -54,23 +53,23 @@ __all__ = [
 # =============================
 def parse_arguments() -> argparse.Namespace:
     """
-    Parse and validate command line arguments for DOI2impact.
+    Parse and validate command line arguments for impact.
 
     Returns:
         argparse.Namespace: Parsed arguments
     """
     parser = argparse.ArgumentParser(
-        description="This script interrogates OpenAlex and Scopus APIs to obtain bibliometric features of papers related to ELIXIR IT services.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+            description="This script interrogates OpenAlex and Scopus APIs to obtain bibliometric features of papers related to ELIXIR IT services.",
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            epilog="""
 Examples:
-  Basic usage:
-    %(prog)s -i input.xlsx -o ./results --openalex_mailto email@domain.com --scopus_key KEY
+    Basic usage:
+        %(prog)s --input_excel input.xlsx --output ./results --openalex_key YOUR_OPENALEX_API_KEY --scopus_key YOUR_SCOPUS_API_KEY
 
-  Skip Scopus (e.g., outside institutional network):
-    %(prog)s -i input.xlsx --skip_scopus --openalex_mailto email@domain.com
-        """
-    )
+    Skip Scopus (e.g., outside institutional network):
+        %(prog)s --input_excel input.xlsx --output ./results --openalex_key YOUR_OPENALEX_API_KEY --skip_scopus
+                """
+        )
 
     # Input options
     input_group = parser.add_argument_group('Input Options')
@@ -87,8 +86,8 @@ Examples:
     output_group.add_argument(
         "-o", "--output",
         type=str,
-        default="ELIXIR.IT_IMPACT.xlsx",
-        help="Output Excel file name or full path (default: ELIXIR.IT_IMPACT.xlsx in ./impact_results/)",
+        default="./reimpact_results/REIMPACT.xlsx",
+        help="Output Excel file name or full path (default: REIMPACT.xlsx in ./reimpact_results/)",
         metavar="FILE"
     )
 
@@ -98,15 +97,8 @@ Examples:
         "-a", "--openalex_key",
         type=str,
         default=os.getenv('OPENALEX_API_KEY'),
-        help="OpenAlex API key (optional, can also set OPENALEX_API_KEY env var)",
+        help="OpenAlex API key (required, or set OPENALEX_API_KEY env var)",
         metavar="KEY"
-    )
-    api_group.add_argument(
-        "-m", "--openalex_mailto",
-        type=str,
-        default=os.getenv('OPENALEX_MAILTO'),
-        help="Contact email for OpenAlex polite pool (REQUIRED if no API key, recommended always). Can also set openalex_mailto env var",
-        metavar="EMAIL"
     )
     api_group.add_argument(
         "--openalex_data_version",
@@ -150,41 +142,12 @@ Examples:
     args = parser.parse_args()
 
     # Validation
-    if not args.openalex_key and not args.openalex_mailto:
-        parser.error("You must provide either an OpenAlex API key (-a) or an email (-m) for polite pool access.")
+    if not args.openalex_key:
+        parser.error("You must provide an OpenAlex API key (-a).")
     if not args.skip_scopus and not args.scopus_key:
         parser.error("Scopus API key (-s) is required unless --skip_scopus is specified.")
 
     return args
-
-# =============================
-# DATABASE SELECTION PROMPT
-# =============================
-def choose_search_databases(skip_scopus_flag: bool) -> dict:
-    """
-    Prompt user to select which databases to use, unless skip_scopus is set.
-    Returns: dict with 'openalex' and 'scopus' boolean flags
-    """
-    if skip_scopus_flag:
-        # print("Scopus search will be skipped (--skip_scopus set). Using only OpenAlex.")
-        return {'openalex': True, 'scopus': False}
-    print("\n==============================")
-    print("     🗃️  DATABASE SELECTION")
-    print("==============================")
-    print("Where do you want to search for citations?")
-    print("  [1] OpenAlex")
-    print("  [2] Scopus")
-    print("  [3] Both")
-    while True:
-        choice = input("Enter your choice (1-3): ").strip()
-        if choice == '1':
-            return {'openalex': True, 'scopus': False}
-        elif choice == '2':
-            return {'openalex': False, 'scopus': True}
-        elif choice == '3':
-            return {'openalex': True, 'scopus': True}
-        else:
-            print("Invalid choice. Please enter 1, 2, or 3.")
 
 # =============================
 # OpenAlex
@@ -204,7 +167,18 @@ class OpenAlexDoi:
         
         # Direct access using DOI URL (original logic)
         try:
-            self.object = pyalex.Works()[f"https://doi.org/{cleaned_doi}"]
+            obj = pyalex.Works()[f"https://doi.org/{cleaned_doi}"]
+            logger.debug(f"pyalex.Works() returned type: {type(obj)}; repr: {repr(obj)}")
+            # pyalex may return OpenAlexResponseList, tuple, list, or dict. Always get dict.
+            if isinstance(obj, dict):
+                self.object = obj
+            elif type(obj).__name__ == 'OpenAlexResponseList' and hasattr(obj, '__len__') and len(obj) > 0 and isinstance(obj[0], dict):
+                self.object = obj[0]
+            elif isinstance(obj, (list, tuple)) and len(obj) > 0 and isinstance(obj[0], dict):
+                self.object = obj[0]
+            else:
+                logger.error(f"pyalex.Works() returned unexpected type: {type(obj)}; repr: {repr(obj)}")
+                raise TypeError(f"pyalex.Works() did not return a dict for DOI {cleaned_doi}. Type: {type(obj)}. See logs for details.")
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 404:
                 raise ValueError(f"DOI not found in OpenAlex: {cleaned_doi}")
@@ -215,20 +189,24 @@ class OpenAlexDoi:
         except KeyError as e:
             raise ValueError(f"DOI not found in OpenAlex: {cleaned_doi}")
         except Exception as e:
+            logger.error(f"Exception in OpenAlexDoi __init__: {e}")
             raise ValueError(f"Failed to retrieve DOI {cleaned_doi} from OpenAlex: {e}")
-        
-        self.citations = self.object['cited_by_count']
-        self.authors = pd.DataFrame(self.object['authorships'])
-        self.cit_by_years = pd.DataFrame(self.object['counts_by_year'])
+
+        self.citations = self.object.get('cited_by_count', 0)
+        self.authors = pd.DataFrame(self.object.get('authorships', []))
+        self.cit_by_years = pd.DataFrame(self.object.get('counts_by_year', []))
 
     def get_institutions(self) -> pd.DataFrame:
         melt_info = list()
         for i in range(0, self.authors.shape[0]):
-            if len(self.authors.loc[i, 'raw_affiliation_strings']) != 0:
+            affil = self.authors.loc[i, 'raw_affiliation_strings'] if 'raw_affiliation_strings' in self.authors.columns else None
+            # Only check len if affil is a list or str
+            if affil is not None and (isinstance(affil, (list, str)) and len(affil) != 0):
                 try:
-                    melt_info.append((self.authors.loc[i, 'institutions'][-1]['display_name'],
-                                      self.authors.loc[i, 'institutions'][-1]['country_code']))
-                except IndexError:
+                    insts = self.authors.loc[i, 'institutions'] if 'institutions' in self.authors.columns else []
+                    if isinstance(insts, list) and len(insts) > 0 and isinstance(insts[-1], dict):
+                        melt_info.append((insts[-1].get('display_name', np.nan), insts[-1].get('country_code', np.nan)))
+                except Exception:
                     pass
         melt_info = set(melt_info)
         melt = pd.DataFrame(melt_info, columns=['institution', 'country'])
@@ -239,38 +217,47 @@ class OpenAlexDoi:
         return melt
 
     def get_citing_works(self) -> tuple:
-        # Build cited_by URL manually since cited_by_api_url field no longer exists
-        work_id = self.object.get('id')
+        """
+        Extracts the works that cite this DOI using the OpenAlex API directly (requests), not pyalex.Works.
+        Returns the sum of citations of the citing works and a DataFrame with their institutions.
+        Returns:
+            tuple: (total_citations_of_citings, citing_institutions_df)
+                - total_citations_of_citings (int): Sum of citations of all citing works.
+                - citing_institutions_df (pd.DataFrame): DataFrame with institutions of citing works' authors.
+        """
+        work_id = self.object.get('id', None)
         if not work_id:
+            logger.debug("No OpenAlex work ID found for this DOI.")
             return None, None
-        
-        # OpenAlex API endpoint to get works that cite this work
-        cited_by_url = f"https://api.openalex.org/works?filter=cites:{work_id}"
-        
-        per_page = 200
+
+        # Extract only the OpenAlex ID (e.g., W1234567890) from the URL if present
+        openalex_id = work_id.split('/')[-1] if isinstance(work_id, str) and '/' in work_id else work_id
+        logger.debug(f"work_id: {work_id} | openalex_id: {openalex_id}")
+
+        # Use OpenAlex API directly
+        api_key = os.environ.get('OPENALEX_API_KEY', None)
+        headers = {"Accept": "application/json"}
+        params = {"filter": f"cites:{openalex_id}", "per-page": 200}
+        if api_key:
+            params["api_key"] = api_key
+        page = 1
         total_cited_by = 0
         rows = []
-        page = 1
-        
         while True:
-            params = {"page": page, "per-page": per_page}
-            # Maybe not usedful, but keep for consistency
-            if hasattr(pyalex.config, 'data_version') and pyalex.config.data_version:
-                params["data-version"] = pyalex.config.data_version
-            
-            ans = requests.get(cited_by_url, params=params)
-            if ans.status_code != 200:
-                logger.debug(f"Failed to get citing works (page {page}): {ans.status_code}")
+            params["page"] = page
+            response = requests.get("https://api.openalex.org/works", headers=headers, params=params)
+            if response.status_code != 200:
+                logger.debug(f"OpenAlex API error {response.status_code}: {response.text}")
                 break
-            j_ans = ans.json()
-            results = j_ans.get('results', [])
+            data = response.json()
+            results = data.get("results", [])
             if not results:
                 break
-            df = pd.DataFrame(results)
-            for i in df.index:
-                el = df.loc[i, 'authorships']
-                doiOfIter = df.loc[i, 'doi']
-                for dict_author in el:
+            for work in results:
+                cited_by_count = work.get('cited_by_count', 0)
+                total_cited_by += cited_by_count
+                doiOfIter = work.get('doi', None)
+                for dict_author in work.get('authorships', []):
                     row = {
                         'service': self.service,
                         'platform': self.platform,
@@ -280,13 +267,11 @@ class OpenAlexDoi:
                         'country': dict_author['institutions'][0]['country_code'] if dict_author['institutions'] else np.nan
                     }
                     rows.append(row)
-            total_cited_by += df['cited_by_count'].sum() if 'cited_by_count' in df else 0
-            if len(results) < per_page:
+            if len(results) < params["per-page"]:
                 break
             page += 1
-        
+        logger.debug(f"Total citations of citings for DOI {self.doi}: {total_cited_by}")
         citing_df = pd.DataFrame(rows) if rows else None
-
         return total_cited_by if total_cited_by > 0 else (0 if citing_df is not None else None), citing_df
 
 class OpenAlexService:
@@ -375,7 +360,8 @@ class MyCitationOverview(CitationOverview):
         return timeline_df
 
 class MyCitationOverviewChunked:
-    """Wrapper to handle Scopus' 1-25 identifier limit by chunking the DOI list.
+    """
+    Wrapper to handle Scopus' 1-25 identifier limit by chunking the DOI list.
     - Splits the identifier list into chunks of 25 DOIs.
     - Builds a MyCitationOverview per chunk.
     - Exposes grandTotal as the sum across chunks and cit4year as the vertical concat.
@@ -387,6 +373,7 @@ class MyCitationOverviewChunked:
         self._start = start
         self._end = end
         clean_ids = [el.strip() for el in identifier if el and el.strip()]
+        import traceback
         for i in range(0, len(clean_ids), 25):
             chunk = clean_ids[i:i+25]
             if not chunk:
@@ -403,7 +390,7 @@ class MyCitationOverviewChunked:
                 self._instances.append(inst)
             except Exception as e:
                 error_name = type(e).__name__
-                logger.debug(f"Chunk {i//25 + 1} failed with error: {error_name}: {e}")
+                logger.debug(f"Chunk {i//25 + 1} failed with error: {error_name}: {e}\n{traceback.format_exc()}")
 
                 for doi in chunk:
                     try:
@@ -417,7 +404,12 @@ class MyCitationOverviewChunked:
                         )
                         self._instances.append(inst)
                     except Exception as doi_error:
-                        logger.debug(f"DOI {doi}: Not found in Scopus - {type(doi_error).__name__}")
+                        if hasattr(pybliometrics.scopus, 'exception'):
+                            if isinstance(doi_error, pybliometrics.scopus.exception.Scopus404Error):
+                                logger.warning(f"DOI {doi}: Not found in Scopus (404)")
+                            elif isinstance(doi_error, pybliometrics.scopus.exception.Scopus401Error) or isinstance(doi_error, pybliometrics.scopus.exception.Scopus403Error):
+                                logger.error(f"DOI {doi}: Unauthorized access to Scopus (401/403). Check API key and network access.")
+                        logger.debug(f"DOI {doi} failed with error: {type(doi_error).__name__}: {doi_error}\n{traceback.format_exc()}")
     @property
     def grandTotal(self) -> int:
         return int(sum(inst.grandTotal for inst in self._instances)) if self._instances else 0
@@ -435,30 +427,23 @@ def main():
     try:
         args = parse_arguments()
         setup_logging(verbose=args.verbose, log_file=args.log_file)
-
-        # Validate inputs
+        # Centralized API configuration and validation
+        from .utils.utils import configure_apis
+        err = configure_apis(args, logger=logger)
+        if err:
+            print(f"❌ {err}")
+            return 1
+        # Validate input Excel
         try:
             validate_file(args.input_excel)
             # Process output path: if it's just a filename, prepend default directory
             if os.path.dirname(args.output) == '':
-                # Just a filename, use default directory
-                args.output = os.path.join('./impact_results', "%s.xlsx" % args.output)
-            elif args.output.endswith('.xlsx') is False:
-                args.output = "%s.xlsx" % args.output
-            else:
-                raise NotImplementedError("Not implemented case for output arg %s" % args.output)
-            # Validate the parent directory
+                args.output = os.path.join(os.path.curdir, 'reimpact_results', args.output)
+            if not args.output.endswith('.xlsx'):
+                args.output = f"{args.output}.xlsx"
             output_dir = os.path.dirname(args.output)
             if output_dir:
                 validate_output_directory(output_dir)
-            if args.openalex_mailto:
-                validate_email(args.openalex_mailto)
-            if not args.skip_scopus:
-                if not args.scopus_key:
-                    raise ValidationError("Scopus API key is required unless --skip_scopus is specified.")
-                validate_api_key(args.scopus_key, key_name="Scopus API key")
-            if args.openalex_key:
-                validate_api_key(args.openalex_key, key_name="OpenAlex API key")
         except ValidationError as e:
             logger.error(f"Input validation error: {e}")
             sys.exit(1)
@@ -468,8 +453,7 @@ def main():
     except Exception as exc:
         print(f"\n❌ Error during initialization: {exc}\n")
         return 1
-    
-# Header
+    # Header
     logger.info('''
 ################################################################################################
 #                                                                                              #
@@ -477,45 +461,12 @@ def main():
 #                                    POWERED BY ELIXIR-IIB                                     #
 #                                                                                              #
 ################################################################################################
-''')    
-# Configuration
+''')
     print('''\n=============================
   ⚙️  CONFIGURATION SUMMARY
 =============================''')
-    if args.openalex_key:
-        pyalex.config.api_key = args.openalex_key
-        logger.info("✅ OpenAlex: API key (100k requests/day)")
-    else:
-        logger.info("✅ OpenAlex: Polite pool (10 req/s)")
-    
-    # Set OpenAlex data version
-    pyalex.config.data_version = args.openalex_data_version
-    version_name = "Walden (new)" if args.openalex_data_version == 2 else "Classic (old)"
-    logger.info(f"📊 OpenAlex data version: {args.openalex_data_version} ({version_name})")
-    if args.openalex_mailto:
-        pyalex.config.mailto = args.openalex_mailto
-        logger.info(f"📧 Email: {args.openalex_mailto}")
-    else:
-        logger.warning("⚠️  No mailto provided")
-        if not args.openalex_key:
-            logger.error("❌ Need API key OR mailto for OpenAlex")
-            logger.info("💡 Set OPENALEX_API_KEY or OPENALEX_MAILTO environment variable\n")
-            return 1
-
-    # Scopus configuration
-    if args.skip_scopus:
-        logger.info("⏭️  Scopus search will be skipped (--skip_scopus set). Using only OpenAlex.")
-    elif args.scopus_key:
-        try:
-            logger.info("⚙️  Scopus: Configuring API key...")
-            pybliometrics.scopus.create_config(keys=[args.scopus_key]) # type: ignore
-            pybliometrics.scopus.init() # type: ignore
-            logger.info("✅ Scopus: API key configured")
-        except Exception as exc:
-            logger.error(f"❌ Scopus configuration failed: {exc}")    
-    logger.info(f"📄 Input excel file: {args.input_excel}")
+    logger.info(f" Input excel file: {args.input_excel}")
     logger.info(f"📁 Output file: {args.output}")
-
     # Load input
     try:
         src = pd.read_excel(args.input_excel)
@@ -523,7 +474,6 @@ def main():
     except Exception as e:
         logger.error(f"Failed to load input Excel: {e}")
         sys.exit(1)
-
     # Prompt for database selection
     search_config = choose_search_databases(args.skip_scopus)
 
@@ -612,7 +562,6 @@ def main():
             scopus_failed = True
     else:
         PyBlioInstanceDict = {}
-        src['PyBlioCitations'] = np.nan
 
     logger.info('\n🗃️  Starting overall data storage...')
     # Create output directory from the file path
@@ -654,6 +603,9 @@ def main():
             aux = df.mgd_citby_year
         aux.fillna(0, inplace=True)
         aux.to_csv(os.path.join(services_dir, re.sub(r"[/@)(]", "_", k) + ".csv"))
+
+    logger.info(f"\n✅ All data saved successfully to {args.output}")
+    logger.info(f"\n✅ Service-specific data saved to {services_dir}")
     logger.info('\n✅ Finished...Good bye 👋')
 
     return 0

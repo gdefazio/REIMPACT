@@ -1,5 +1,5 @@
 """
-Utility module for ELIXIR.IT_IMPACT
+Utility module for REIMPACT
 
 Provides validation, logging, and helper functions.
 """

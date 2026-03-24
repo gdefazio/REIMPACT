@@ -14,7 +14,6 @@ import argparse
 import logging
 import pandas as pd
 import pyalex
-import pybliometrics
 from pybliometrics.scopus import (
     AuthorSearch as ScopusAuthorSearch,
     AbstractRetrieval,
@@ -23,11 +22,11 @@ from pybliometrics.scopus import (
 )
 from typing import List, Optional, Tuple, Dict
 from .utils.utils import (
+    get_available_databases,
+    choose_search_databases,
     setup_logging,
     sanitize_filename, 
-    validate_email,
     validate_output_directory,
-    validate_api_key,
     validate_author_name,
     validate_authors_file,
     validate_max_works,
@@ -54,7 +53,6 @@ __all__ = [
     'fetch_author_dois_scopus',
     'process_single_author',
     'build_author_row',
-    'sanitize_doi'
 ]
 
 # =============================
@@ -78,10 +76,10 @@ def parse_arguments() -> argparse.Namespace:
         epilog="""
 Examples:
   Single author:
-    %(prog)s -a "Surname, Firstname" --openalex_mailto email@domain.com --scopus_key KEY
+    %(prog)s --author "Surname, Firstname" --output ./authors_results --openalex_key YOUR_OPENALEX_API_KEY --scopus_key YOUR_SCOPUS_API_KEY
   
   Multiple authors from file:
-    %(prog)s --input_authors authors.xlsx --openalex_mailto email@domain.com --scopus_key KEY -M 50
+    %(prog)s --input_authors authors.xlsx --output ./authors_results --openalex_key YOUR_OPENALEX_API_KEY --scopus_key YOUR_SCOPUS_API_KEY -M 50
         """
     )
     
@@ -106,15 +104,8 @@ Examples:
         "--openalex_key",
         type=str,
         default=os.getenv('OPENALEX_API_KEY'),
-        help="OpenAlex API key (100k requests/day). Can also set OPENALEX_API_KEY env var",
+        help="OpenAlex API key (required, or set OPENALEX_API_KEY env var)",
         metavar="KEY"
-    )
-    api_group.add_argument(
-        "-m", "--openalex_mailto",
-        type=str,
-        default=os.getenv('OPENALEX_MAILTO'),
-        help="Contact email for OpenAlex polite pool. Can also set OPENALEX_MAILTO env var",
-        metavar="EMAIL"
     )
     api_group.add_argument(
         "--openalex_data_version",
@@ -188,13 +179,11 @@ class OpenAlexAuthorSearch:
     Attributes:
         max_results: Maximum number of candidate authors to return
         per_page: Results per API page (1-200)
-        mailto: Contact email for polite pool
     """
     
-    def __init__(self, max_results: int = 25, per_page: int = 25, mailto: Optional[str] = None):
+    def __init__(self, max_results: int = 25, per_page: int = 25):
         self.max_results = max_results
         self.per_page = max(1, min(per_page, 200))
-        self.mailto = mailto
 
     def search(self, query: str) -> List[dict]:
         """Search for authors matching query string."""
@@ -203,8 +192,6 @@ class OpenAlexAuthorSearch:
             raise ValueError("Author query cannot be empty.")
         results: List[dict] = []
         query_obj = pyalex.Authors().search(cleaned)
-        if self.mailto:
-            query_obj = query_obj.mailto(self.mailto)
         iterator = query_obj.paginate(method="page", per_page=self.per_page)
         for page in iterator:
             for raw_author in page:
@@ -689,35 +676,6 @@ def build_author_row(
     }
 
 
-def choose_search_databases() -> Dict[str, bool]:
-    """
-    Interactive prompt for database selection.
-    
-    Returns:
-        Dictionary with 'openalex' and 'scopus' boolean flags
-    """
-    print("\n" + "="*40)
-    print("  AUTHOR SEARCH DATABASE SELECTION")
-    print("="*40)
-    print("\n  Where do you want to search for authors?\n")
-    print("  [1] OpenAlex")
-    print("  [2] Scopus")
-    print("  [3] Both")
-    
-    while True:
-        choice = input("\n  Enter your choice (1-3): ").strip()
-        if choice == '1':
-            print("\n  ✅ Selected: OpenAlex only\n")
-            return {'openalex': True, 'scopus': False}
-        elif choice == '2':
-            print("\n  ✅ Selected: Scopus only\n")
-            return {'openalex': False, 'scopus': True}
-        elif choice == '3':
-            print("\n  ✅ Selected: Both OpenAlex and Scopus\n")
-            return {'openalex': True, 'scopus': True}
-        else:
-            print("  ❌ Invalid choice. Please enter 1, 2, or 3.")
-
 
 def process_single_author(
     author_name: str,
@@ -890,31 +848,14 @@ def main():
     try:
         # Parse arguments
         options = parse_arguments()
-        
         # Setup logging
         setup_logging(verbose=options.verbose, log_file=options.log_file)
-
-        # Validate inputs
-        print("\n  🔍 Validating inputs...")
-        
-        # Validate email
-        if options.openalex_mailto:
-            try:
-                validate_email(options.openalex_mailto)
-                logger.debug(f" Email format valid: {options.openalex_mailto}")
-            except ValidationError as e:
-                print(f"  ❌ {e}\n")
-                return 1
-        
-        # Validate API keys
-        try:
-            validate_api_key(options.openalex_key, "OpenAlex API key")
-            validate_api_key(options.scopus_key, "Scopus API key")
-            logger.debug("✅ API keys format valid")
-        except ValidationError as e:
-            print(f"  ❌ {e}\n")
+        # Centralized API configuration and validation
+        from .utils.utils import configure_apis
+        err = configure_apis(options, logger=logger)
+        if err:
+            print(f"❌ {err}")
             return 1
-        
         # Validate author name or file
         if options.author:
             try:
@@ -923,7 +864,6 @@ def main():
             except ValidationError as e:
                 print(f"  ❌ {e}\n")
                 return 1
-        
         if options.input_authors:
             try:
                 validate_authors_file(options.input_authors)
@@ -931,19 +871,16 @@ def main():
             except ValidationError as e:
                 print(f"  ❌ {e}\n")
                 return 1
-        
         # Validate output path (only if specified)
         if options.output:
-            # If just a filename, will be handled later
             output_dir_to_validate = os.path.dirname(options.output)
-            if output_dir_to_validate:  # Has a directory component
+            if output_dir_to_validate:
                 try:
                     validate_output_directory(output_dir_to_validate)
                     logger.debug(f"✅ Output directory valid: {output_dir_to_validate}")
                 except ValidationError as e:
                     print(f"  ❌ {e}\n")
                     return 1
-        
         # Validate max_works
         try:
             validate_max_works(options.max_works)
@@ -952,9 +889,7 @@ def main():
         except ValidationError as e:
             print(f"  ❌ {e}\n")
             return 1
-        
         print("  ✅ All inputs validated successfully\n")
-        
     except KeyboardInterrupt:
         print("\n⚠️  Operation cancelled by user\n")
         return 1
@@ -962,62 +897,19 @@ def main():
         print(f"\n❌ Error during initialization: {exc}\n")
         logger.exception("Detailed error:")
         return 1
-    
     # Header
     print("\n" + "="*80)
     print(f"{' '*20}AUTHOR METADATA AND DOI RETRIEVAL SYSTEM")
     print(f"{' '*30}Powered by ELIXIR-IIB")
     print("="*80 + "\n")
-    
     # Determine output directory
-    default_output_dir = './authors_results'
-    
+    default_output_dir = os.path.join(os.getcwd(), 'authors_results')
     alex_key = options.openalex_key
-    mailto = options.openalex_mailto
     scopus_key = options.scopus_key
     author_query = options.author
     input_authors = options.input_authors
     max_works = options.max_works
     skip_scopus_author = options.skip_scopus
-
-    # OpenAlex configuration
-    print('''\n==============================
-    📡 API Configuration
-==============================''')
-    if alex_key:
-        pyalex.config.api_key = alex_key
-        print("✅  OpenAlex: API key (100k requests/day)")
-    else:
-        print("✅  OpenAlex: Polite pool (10 req/s)")
-
-    # Set OpenAlex data version
-    pyalex.config.data_version = options.openalex_data_version
-    version_name = "Walden (new)" if options.openalex_data_version == 2 else "Classic (old)"
-    print(f"📊 OpenAlex data version: {options.openalex_data_version} ({version_name})")
-
-    if mailto:
-        pyalex.config.mailto = mailto
-        print(f"📧 Mail: {mailto}")
-    else:
-        print("⚠️  No mailto provided")
-        if not alex_key:
-            print("❌  Need API key OR mailto for OpenAlex")
-            print("💡  Set OPENALEX_API_KEY or OPENALEX_MAILTO environment variable\n")
-            return 1
-
-    # Scopus configuration
-    if skip_scopus_author:
-        logger.info("⏭️  Scopus search will be skipped (--skip_scopus set). Using only OpenAlex.")
-    elif scopus_key:
-        try:
-            logger.info("⚙️ Scopus: Configuring API key...")
-            pybliometrics.scopus.create_config(keys=[scopus_key]) # type: ignore
-            pybliometrics.scopus.init() # type: ignore
-            logger.info("✅ Scopus: API key configured")
-        except Exception as exc:
-            logger.error(f"❌ Scopus configuration failed: {exc}") 
-
-    print("")  # Empty line after configuration
     
     # Prepare list of authors
     authors_to_process = []
@@ -1051,7 +943,7 @@ def main():
         search_config = {'openalex': True, 'scopus': False}
         print("  🔍 Search mode: OpenAlex only (Scopus skipped)\n")
     else:
-        search_config = choose_search_databases()
+        search_config = choose_search_databases(options)
 
     # Configuration summary
     print("="*40)
@@ -1173,7 +1065,7 @@ if __name__ == '__main__':
         sys.exit(exit_code if exit_code is not None else 0)
     except KeyboardInterrupt:
         print("\n\n⚠️  Operation cancelled by user\n")
-        sys.exit(130)  # Standard exit code for SIGINT
+        sys.exit(130)
     except Exception as exc:
         print(f"\n❌ Fatal error: {exc}\n")
         sys.exit(1)

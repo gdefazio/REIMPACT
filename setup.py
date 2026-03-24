@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Setup script for ELIXIR.IT_IMPACT package
+Setup script for REIMPACT package
 """
 
 from setuptools import setup, find_packages
@@ -25,14 +25,14 @@ def read_requirements():
     return []
 
 setup(
-    name='elixir-impact',
+    name='reimpact',
     version='1.0.0',
     author=['Giuseppe Defazio', 'Vincenzo Angiulli'],
     author_email=['giuseppe.defazio@uniba.it', 'vincenzo.angiulli@uniba.it'],
-    description='Bibliometric Impact Assessment System for ELIXIR services and authors',
+    description='Research infrastructure Evaluation tool for IMPACT',
     long_description=read_long_description(),
     long_description_content_type='text/markdown',
-    url='https://github.com/gdefazio/ELIXIR.IT_IMPACT',
+    url='https://github.com/gdefazio/REIMPACT',
     
     # Package configuration
     packages=find_packages(exclude=['test', 'test.*', 'docs', 'docs.*']),
@@ -45,8 +45,8 @@ setup(
     # Entry points for command-line scripts
     entry_points={
         'console_scripts': [
-            'elixir-author-search=source.AuthorAsService:main',
-            'elixir-doi-impact=source.DOI2impact:main',
+            'reimpact-author-search=source.author_search:main',
+            'reimpact-impact=source.impact:main',
         ],
     },
     
@@ -56,18 +56,16 @@ setup(
         'Intended Audience :: Science/Research',
         'Topic :: Scientific/Engineering :: Information Analysis',
         'License :: OSI Approved :: MIT License',
-        'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.11',
-        'Programming Language :: Python :: 3.12',
         'Operating System :: OS Independent',
     ],
     
     # Additional metadata
     keywords='bibliometrics scopus openalex citations impact-assessment elixir',
     project_urls={
-        'Bug Reports': 'https://github.com/gdefazio/ELIXIR.IT_IMPACT/issues',
-        'Source': 'https://github.com/gdefazio/ELIXIR.IT_IMPACT',
-        'Documentation': 'https://github.com/gdefazio/ELIXIR.IT_IMPACT/tree/main/docs',
+        'Bug Reports': 'https://github.com/gdefazio/REIMPACT/issues',
+        'Source': 'https://github.com/gdefazio/REIMPACT',
+        'Documentation': 'https://github.com/gdefazio/REIMPACT/tree/main/docs',
     },
     
     # Include package data
