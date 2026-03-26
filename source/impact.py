@@ -26,7 +26,6 @@ from .utils.utils import (
     validate_file,
     validate_output_directory,
     sanitize_doi,
-    get_available_databases,
     choose_search_databases,
     ValidationError
 )
@@ -96,7 +95,6 @@ Examples:
     api_group.add_argument(
         "-k", "--openalex_key",
         type=str,
-        required=True,
         default=os.getenv('OPENALEX_API_KEY'),
         help="OpenAlex API key (required, or set OPENALEX_API_KEY env var)",
         metavar="OPENALEX_API_KEY"
@@ -142,11 +140,11 @@ Examples:
 
     args = parser.parse_args()
 
-    # Validation
-    if not args.openalex_key:
-        parser.error("You must provide an OpenAlex API key (-a).")
-    if not args.skip_scopus and not args.scopus_key:
-        parser.error("Scopus API key (-s) is required unless --skip_scopus is specified.")
+    # # Validation
+    # if not args.openalex_key:
+    #     parser.error("You must provide an OpenAlex API key (-a).")
+    # if not args.skip_scopus and not args.scopus_key:
+    #     parser.error("Scopus API key (-s) is required unless --skip_scopus is specified.")
 
     return args
 
@@ -476,7 +474,7 @@ def main():
         logger.error(f"Failed to load input Excel: {e}")
         sys.exit(1)
     # Prompt for database selection
-    search_config = choose_search_databases(args.skip_scopus)
+    search_config = choose_search_databases(args)
 
     # OpenAlex processing
     if search_config['openalex']:

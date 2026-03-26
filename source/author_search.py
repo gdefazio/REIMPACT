@@ -22,7 +22,6 @@ from pybliometrics.scopus import (
 )
 from typing import List, Optional, Tuple, Dict
 from .utils.utils import (
-    get_available_databases,
     choose_search_databases,
     setup_logging,
     sanitize_filename, 
@@ -103,7 +102,6 @@ Examples:
     api_group.add_argument(
         "-k", "--openalex_key",
         type=str,
-        required=True,
         default=os.getenv('OPENALEX_API_KEY'),
         help="OpenAlex API key (required, or set OPENALEX_API_KEY env var)",
         metavar="OPENALEX_API_KEY"
@@ -843,33 +841,33 @@ def main():
     """Main execution function."""
     try:
         # Parse arguments
-        options = parse_arguments()
+        args = parse_arguments()
         # Setup logging
-        setup_logging(verbose=options.verbose, log_file=options.log_file)
+        setup_logging(verbose=args.verbose, log_file=args.log_file)
         # Centralized API configuration and validation
         from .utils.utils import configure_apis
-        err = configure_apis(options, logger=logger)
+        err = configure_apis(args, logger=logger)
         if err:
             print(f"❌ {err}")
             return 1
         # Validate author name or file
-        if options.author:
+        if args.author:
             try:
-                validate_author_name(options.author)
-                logger.debug(f"✅ Author name valid: {options.author}")
+                validate_author_name(args.author)
+                logger.debug(f"✅ Author name valid: {args.author}")
             except ValidationError as e:
                 print(f"  ❌ {e}\n")
                 return 1
-        if options.input_authors:
+        if args.input_authors:
             try:
-                validate_authors_file(options.input_authors)
-                logger.debug(f"✅ Authors file valid: {options.input_authors}")
+                validate_authors_file(args.input_authors)
+                logger.debug(f"✅ Authors file valid: {args.input_authors}")
             except ValidationError as e:
                 print(f"  ❌ {e}\n")
                 return 1
         # Validate output path (only if specified)
-        if options.output:
-            output_dir_to_validate = os.path.dirname(options.output)
+        if args.output:
+            output_dir_to_validate = os.path.dirname(args.output)
             if output_dir_to_validate:
                 try:
                     validate_output_directory(output_dir_to_validate)
@@ -879,18 +877,18 @@ def main():
                     return 1
         # Validate max_works
         try:
-            validate_max_works(options.max_works)
-            if options.max_works:
-                logger.debug(f"✅ max_works valid: {options.max_works}")
+            validate_max_works(args.max_works)
+            if args.max_works:
+                logger.debug(f"✅ max_works valid: {args.max_works}")
         except ValidationError as e:
-            print(f"  ❌ {e}\n")
+            logger.error(f"{e}\n")
             return 1
-        print("  ✅ All inputs validated successfully\n")
+        logger.debug("✅ All inputs validated successfully\n")
     except KeyboardInterrupt:
-        print("\n⚠️  Operation cancelled by user\n")
+        logger.warning("Operation cancelled by user\n")
         return 1
     except Exception as exc:
-        print(f"\n❌ Error during initialization: {exc}\n")
+        logger.error(f"Error during initialization: {exc}\n")
         logger.exception("Detailed error:")
         return 1
     # Header
@@ -900,18 +898,19 @@ def main():
     print("="*80 + "\n")
     # Determine output directory
     default_output_dir = os.path.join(os.getcwd(), 'authors_results')
-    alex_key = options.openalex_key
-    scopus_key = options.scopus_key
-    author_query = options.author
-    input_authors = options.input_authors
-    max_works = options.max_works
-    skip_scopus_author = options.skip_scopus
-    
+    alex_key = args.openalex_key
+    scopus_key = args.scopus_key
+    author_query = args.author
+    input_authors = args.input_authors
+    max_works = args.max_works
+    skip_scopus_author = args.skip_scopus
+        
+    search_config = choose_search_databases(args)
     # Prepare list of authors
     authors_to_process = []
     if author_query:
         authors_to_process = [author_query]
-        print(f"  👤 Processing single author: {author_query}\n")
+        logger.info(f"👤 Processing single author: {author_query}\n")
     elif input_authors:
         try:
             authors_df = pd.read_excel(input_authors)
@@ -922,30 +921,23 @@ def main():
             else:
                 authors_to_process = authors_df.iloc[:, 0].dropna().tolist()
             
-            print(f"📁 Loaded {len(authors_to_process)} authors from file\n")
+            logger.info(f"📁 Loaded {len(authors_to_process)} authors from file\n")
         except FileNotFoundError:
-            print(f"❌ File not found: {input_authors}\n")
+            logger.error(f"File not found: {input_authors}\n")
             return 1
         except Exception as exc:
-            print(f"❌ Unable to read authors file: {exc}\n")
+            logger.error(f"Unable to read authors file: {exc}\n")
             return 1
     
     if not authors_to_process:
-        print("❌ No authors to process\n")
+        logger.error("No authors to process\n")
         return 1
-    
-    # Database selection
-    if skip_scopus_author:
-        search_config = {'openalex': True, 'scopus': False}
-        print("  🔍 Search mode: OpenAlex only (Scopus skipped)\n")
-    else:
-        search_config = choose_search_databases(options)
 
     # Configuration summary
     print("="*40)
     print("  ⚙️  CONFIGURATION SUMMARY")
     print("="*40)
-    output_display = options.output if options.output else f"{default_output_dir}/<author>_DOIs_<source>.xlsx"
+    output_display = args.output if args.output else f"{default_output_dir}/<author>_DOIs_<source>.xlsx"
     print(f"  📂 Output: {output_display}")
     print(f"  👥 Authors: {len(authors_to_process)}")
     print(f"  🔍 OpenAlex: {'✅' if search_config['openalex'] else '❌'}")
@@ -994,17 +986,17 @@ def main():
         """Prepare output file path based on user input or default."""
         default_filename = f'{base_name}_DOIs_{source}.xlsx'
         
-        if options.output:
+        if args.output:
             # User specified output
-            output_dir = os.path.dirname(options.output)
+            output_dir = os.path.dirname(args.output)
             if output_dir:
                 # Full path specified
                 # Extract base name and replace source
-                base_output = os.path.splitext(os.path.basename(options.output))[0]
+                base_output = os.path.splitext(os.path.basename(args.output))[0]
                 return os.path.join(output_dir, f'{base_output}_{source}.xlsx')
             else:
                 # Just filename, use default directory
-                base_output = os.path.splitext(options.output)[0]
+                base_output = os.path.splitext(args.output)[0]
                 return os.path.join(default_output_dir, f'{base_output}_{source}.xlsx')
         else:
             # No output specified, use default

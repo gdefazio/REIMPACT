@@ -14,13 +14,13 @@ Python package for bibliometric assessment of ELIXIR services and authors, based
 - Interactive author search and disambiguation on OpenAlex and Scopus
 - Output: Excel file with all DOIs associated to selected authors
 - Supports single author or batch mode (Excel file with author list)
-- **CLI Command**: `elixir-author-search`
+- **CLI Command**: `reimpact-author-search`
 
 ### 2. Impact Assessment via DOIs
 - Analyzes bibliometric impact (citations, institutions, aggregated metrics) starting from a list of DOIs
 - Input: Excel file produced by Author DOI Search or any file with a DOI column
 - Output: Excel report with impact statistics per author/service
-- **CLI Command**: `elixir-doi-impact`
+- **CLI Command**: `reimpact-impact`
 
 ---
 
@@ -49,18 +49,16 @@ See [INSTALLATION](docs/INSTALLATION.md) for detailed instructions.
 
 1. **Author DOI Search**
    ```bash
-   elixir-author-search \
+   reimpact-author-search \
      --input_authors test/authors_template.xlsx \
-    --openalex_key YOUR_OPENALEX_API_KEY \
-     --scopus_key YOUR_SCOPUS_KEY
+    --openalex_key YOUR_OPENALEX_API_KEY
    ```
 
 2. **Impact Assessment via DOI**
    ```bash
-   elixir-doi-impact \
+   reimpact-impact \
      --input_excel authors_results/Authors_DOIs_OpenAlex.xlsx \
-     --openalex_key YOUR_OPENALEX_API_KEY \
-     --scopus_key YOUR_SCOPUS_KEY
+     --openalex_key YOUR_OPENALEX_API_KEY
    ```
 
 ---
@@ -70,32 +68,29 @@ See [INSTALLATION](docs/INSTALLATION.md) for detailed instructions.
 
 ### Search DOIs for a Single Author
 ```bash
-elixir-author-search \
+reimpact-author-search \
   --author "Mario Rossi" \
-  --openalex_key YOUR_OPENALEX_API_KEY \
-  --scopus_key YOUR_SCOPUS_KEY
+  --openalex_key YOUR_OPENALEX_API_KEY 
 ```
 
 ### Search DOIs for a List of Authors
 ```bash
-elixir-author-search \
+reimpact-author-search \
   --input_authors test/authors_template.xlsx \
-  --openalex_key YOUR_OPENALEX_API_KEY \
-  --scopus_key YOUR_SCOPUS_KEY
+  --openalex_key YOUR_OPENALEX_API_KEY
 ```
 
 ### Impact Assessment from Authors DOI File
 ```bash
-elixir-doi-impact \
+reimpact-impact \
   --input_excel authors_results/Authors_DOIs_OpenAlex.xlsx \
   --output output_impact/output_file.xlsx \
   --openalex_key YOUR_OPENALEX_API_KEY \
-  --scopus_key YOUR_SCOPUS_KEY
 ```
 
 ### Impact Assessment from Services DOI File
 ```bash
-elixir-doi-impact \
+  reimpact-impact \
   --input_excel test/services_template.xlsx \
   --output output_impact/output_file.xlsx \
   --openalex_key YOUR_OPENALEX_API_KEY
@@ -173,18 +168,18 @@ REIMPACT/
 
 After installation, two commands are available:
 
-### `elixir-author-search`
+### `reimpact-author-search`
 Search for authors and retrieve their publication DOIs.
 
 ```bash
-elixir-author-search --help
+reimpact-author-search --help
 ```
 
-### `elixir-doi-impact`
+### `reimpact-impact`
 Analyze bibliometric impact from a list of DOIs.
 
 ```bash
-elixir-doi-impact --help
+reimpact-impact --help
 ```
 
 ---

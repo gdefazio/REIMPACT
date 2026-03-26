@@ -302,14 +302,11 @@ def get_available_databases(openalex_key: Optional[str], scopus_key: Optional[st
 
     return {'openalex': openalex_ok, 'scopus': scopus_ok, 'reasons': reasons}
 
-def choose_search_databases(skip_scopus_flag: bool) -> dict:
+def choose_search_databases(args) -> dict:
     """
     Prompt user to select which databases to use, but only among those actually available.
     Returns: dict with 'openalex' and 'scopus' boolean flags
     """
-    import inspect
-    frame = inspect.currentframe().f_back
-    args = frame.f_locals.get('args', None)
     if args is None:
         raise RuntimeError("choose_search_databases must be called after argument parsing and args assignment.")
     db_status = get_available_databases(
@@ -324,20 +321,20 @@ def choose_search_databases(skip_scopus_flag: bool) -> dict:
     if db_status['scopus']:
         available.append('Scopus')
     if not available:
-        print("\n❌ No valid database available. Check your API keys and network access.")
-        print(f"Reasons: {db_status['reasons']}")
+        logger.error("No valid database available. Check your API keys and network access.")
+        logger.info(f"Reasons: {db_status['reasons']}")
         sys.exit(1)
     if len(available) == 1:
-        print(f"\n✅ Only {available[0]} is available and will be used.")
+        logger.info(f"\n✅ Only {available[0]} is available and will be used.")
         return {'openalex': db_status['openalex'], 'scopus': db_status['scopus']}
-    print("\n==============================")
-    print("     🗃️  DATABASE SELECTION")
-    print("==============================")
-    print("Where do you want to search?")
+    logger.info("\n==============================")
+    logger.info("     🗃️  DATABASE SELECTION")
+    logger.info("==============================")
+    logger.info("Where do you want to search?")
     for idx, db in enumerate(available, 1):
-        print(f"  [{idx}] {db}")
+        logger.info(f"  [{idx}] {db}")
     if len(available) == 2:
-        print(f"  [3] Both")
+        logger.info(f"  [3] Both")
     while True:
         choice = input(f"Enter your choice (1-{len(available)+1 if len(available)==2 else len(available)}): ").strip()
         if choice == '1':
@@ -347,7 +344,7 @@ def choose_search_databases(skip_scopus_flag: bool) -> dict:
         elif choice == '3' and len(available) == 2:
             return {'openalex': True, 'scopus': True}
         else:
-            print("Invalid choice. Please enter a valid option.")
+            logger.error("Invalid choice. Please enter a valid option.")
 
 # Helper for real Scopus API check (minimal query)
 def check_scopus_key(api_key: str) -> bool:
@@ -550,27 +547,23 @@ def configure_apis(options, logger=logger):
     if alex_key:
         set_openalex_apikey(alex_key)
         logger.info("✅  OpenAlex: API key (100k requests/day)")
+        pyalex.config.data_version = data_version
+        version_name = "Walden (new)" if data_version == 2 else "Classic (old)"
+        logger.info(f"📊  OpenAlex data version: {data_version} ({version_name})")
     else:
-        logger.info("✅  OpenAlex: Polite pool (10 req/s)")
-    pyalex.config.data_version = data_version
-    version_name = "Walden (new)" if data_version == 2 else "Classic (old)"
-    logger.info(f"📊 OpenAlex data version: {data_version} ({version_name})")
-    if not alex_key:
-        logger.error("Need API key for OpenAlex")
-        logger.info("💡  Set OPENALEX_API_KEY environment variable\n")
-        return "Need API key for OpenAlex"
+        logger.warning("OpenAlex: no API key provided (OpenAlex will be unavailable)")
     # Scopus
     if skip_scopus:
         logger.info("⏭️  Scopus search will be skipped (--skip_scopus set). Using only OpenAlex.")
     elif scopus_key:
         try:
-            logger.info("⚙️ Scopus: Configuring API key...")
+            logger.info("⚙️  Scopus: Configuring API key...")
             pybliometrics.scopus.create_config(keys=[scopus_key]) # type: ignore
             pybliometrics.scopus.init() # type: ignore
-            logger.info("✅ Scopus: API key configured")
+            logger.info("✅  Scopus: API key configured")
         except Exception as exc:
             logger.error(f"Scopus configuration failed: {exc}")
             return f"Scopus configuration failed: {exc}"
     else:
-        logger.warning("No Scopus key provided (Scopus will be unavailable)")
+        logger.warning("Scopus: no API key provided (Scopus will be unavailable)")
     return None

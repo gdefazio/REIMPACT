@@ -7,7 +7,6 @@ based on OpenAlex and Scopus databases.
 Modules:
     - author-search: Author search and DOI retrieval
     - impact: Impact assessment from DOI lists
-    - utils: Utility functions and validation
 """
 
 __version__ = "1.0.0"
