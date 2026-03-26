@@ -50,15 +50,17 @@ See [INSTALLATION](docs/INSTALLATION.md) for detailed instructions.
 1. **Author DOI Search**
    ```bash
    reimpact-author-search \
-     --input_authors test/authors_template.xlsx \
-    --openalex_key YOUR_OPENALEX_API_KEY
+    --input_authors test/authors_template.xlsx \
+    --openalex_key YOUR_OPENALEX_API_KEY \
+    --scopus_key YOUR_SCOPUS_API_KEY
    ```
 
 2. **Impact Assessment via DOI**
    ```bash
    reimpact-impact \
      --input_excel authors_results/Authors_DOIs_OpenAlex.xlsx \
-     --openalex_key YOUR_OPENALEX_API_KEY
+     --openalex_key YOUR_OPENALEX_API_KEY \
+     --scopus_key YOUR_SCOPUS_API_KEY
    ```
 
 ---
@@ -70,14 +72,16 @@ See [INSTALLATION](docs/INSTALLATION.md) for detailed instructions.
 ```bash
 reimpact-author-search \
   --author "Mario Rossi" \
-  --openalex_key YOUR_OPENALEX_API_KEY 
+  --openalex_key YOUR_OPENALEX_API_KEY \
+  --scopus_key YOUR_SCOPUS_API_KEY
 ```
 
 ### Search DOIs for a List of Authors
 ```bash
 reimpact-author-search \
   --input_authors test/authors_template.xlsx \
-  --openalex_key YOUR_OPENALEX_API_KEY
+  --openalex_key YOUR_OPENALEX_API_KEY \
+  --scopus_key YOUR_SCOPUS_API_KEY
 ```
 
 ### Impact Assessment from Authors DOI File
@@ -86,6 +90,7 @@ reimpact-impact \
   --input_excel authors_results/Authors_DOIs_OpenAlex.xlsx \
   --output output_impact/output_file.xlsx \
   --openalex_key YOUR_OPENALEX_API_KEY \
+  --scopus_key YOUR_SCOPUS_API_KEY
 ```
 
 ### Impact Assessment from Services DOI File
@@ -93,7 +98,8 @@ reimpact-impact \
   reimpact-impact \
   --input_excel test/services_template.xlsx \
   --output output_impact/output_file.xlsx \
-  --openalex_key YOUR_OPENALEX_API_KEY
+  --openalex_key YOUR_OPENALEX_API_KEY \
+  --scopus_key YOUR_SCOPUS_API_KEY
 ```
 
 ### Using as Python Library
