@@ -45,8 +45,8 @@ setup(
     # Entry points for command-line scripts
     entry_points={
         'console_scripts': [
-            'reimpact-author-search=source.author_search:main',
-            'reimpact-impact=source.impact:main',
+            'reimpact-author-search=reimpact.author_search:main',
+            'reimpact-impact=reimpact.impact:main',
         ],
     },
     

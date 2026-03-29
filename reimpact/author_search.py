@@ -98,21 +98,13 @@ Examples:
     )
 
     # API configuration
-    api_group = parser.add_argument_group('API Configuration')
+    api_group = parser.add_mutually_exclusive_group(required=True)
     api_group.add_argument(
         "-k", "--openalex_key",
         type=str,
         default=os.getenv('OPENALEX_API_KEY'),
         help="OpenAlex API key (required, or set OPENALEX_API_KEY env var)",
         metavar="OPENALEX_API_KEY"
-    )
-    api_group.add_argument(
-        "--openalex_data_version",
-        type=int,
-        choices=[1, 2],
-        default=2,
-        help="OpenAlex data version: 1=Classic (old), 2=Walden (new, default). See https://oreo.openalex.org/",
-        metavar="VERSION"
     )
     api_group.add_argument(
         "-s", "--scopus_key",
@@ -123,7 +115,7 @@ Examples:
     )
     
     # Output and behavior
-    output_group = parser.add_argument_group('Output & Behavior')
+    output_group = parser.add_argument_group('Output Options')
     output_group.add_argument(
         "-o", "--output",
         type=str,
@@ -131,24 +123,34 @@ Examples:
         help="Output Excel file name or full path. If not specified, uses 'AuthorName_DOIs_Source.xlsx' in ./authors_results/",
         metavar="FILE"
     )
-    output_group.add_argument(
+
+    behavior_group = parser.add_argument_groups('Behavior Options')
+    behavior_group.add_argument(
         "-M", "--max_works",
         type=int,
         default=None,
         help="Maximum works per author (default: all available)",
         metavar="N_WORKS"
     )
-    output_group.add_argument(
+    behavior_group.add_argument(
+        "--openalex_data_version",
+        type=int,
+        choices=[1, 2],
+        default=2,
+        help="OpenAlex data version: 1=Classic (old), 2=Walden (new, default). See https://oreo.openalex.org/",
+        metavar="VERSION"
+    )
+    behavior_group.add_argument(
         "--skip_scopus",
         action="store_true",
         help="Skip Scopus search (use when outside institutional network)"
     )
-    output_group.add_argument(
+    behavior_group.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="Enable verbose logging (DEBUG level)"
     )
-    output_group.add_argument(
+    behavior_group.add_argument(
         "--log_file",
         type=str,
         default=None,
@@ -157,10 +159,8 @@ Examples:
     )
 
     if ARGCOMPLETE_AVAILABLE:
-        argcomplete.autocomplete(parser) # type: ignore
+        argcomplete.autocomplete(parser)
     args = parser.parse_args()
-    
-    # No need for manual validation: mutually exclusive group enforces requirement
     return args
 
 # ============================================================================
@@ -650,7 +650,7 @@ def build_author_row(
         source: Data source ("OpenAlex" or "Scopus")
         
     Returns:
-        Dictionary with columns: Service, Applicant, Platform, Number of DOIs, Primary doi first then others
+        Dictionary with columns: Author, Applicant, Platform, Number of DOIs, Primary doi first then others
     """
     author_name = author.get('display_name', 'Unknown')
     institution = author.get('last_known_institution', '')
@@ -662,7 +662,7 @@ def build_author_row(
         institution = scopus_selection.get('affiliation', institution)
     
     return {
-        "Service": author_name,
+        "Author": author_name,
         "Applicant": institution,
         "Platform": source,
         "Number of DOIs": len(dois),

@@ -91,21 +91,13 @@ Examples:
     )
 
     # API configuration
-    api_group = parser.add_argument_group('API Configuration')
+    api_group = parser.add_mutually_exclusive_group(required=True)
     api_group.add_argument(
         "-k", "--openalex_key",
         type=str,
         default=os.getenv('OPENALEX_API_KEY'),
         help="OpenAlex API key (required, or set OPENALEX_API_KEY env var)",
         metavar="OPENALEX_API_KEY"
-    )
-    api_group.add_argument(
-        "--openalex_data_version",
-        type=int,
-        choices=[1, 2],
-        default=2,
-        help="OpenAlex data version: 1=Classic (old), 2=Walden (new, default). See https://oreo.openalex.org/",
-        metavar="VERSION"
     )
     api_group.add_argument(
         "-s", "--scopus_key",
@@ -116,11 +108,19 @@ Examples:
     )
 
     # Behavior
-    behavior_group = parser.add_argument_group('Behavior')
+    behavior_group = parser.add_argument_group('Behavior Options')
     behavior_group.add_argument(
         "--skip_scopus",
         action="store_true",
         help="Skip Scopus search (use when outside institutional network)"
+    )
+    behavior_group.add_argument(
+        "--openalex_data_version",
+        type=int,
+        choices=[1, 2],
+        default=2,
+        help="OpenAlex data version: 1=Classic (old), 2=Walden (new, default). See https://oreo.openalex.org/",
+        metavar="VERSION"
     )
     behavior_group.add_argument(
         "-v", "--verbose",
@@ -136,16 +136,9 @@ Examples:
     )
 
     if ARGCOMPLETE_AVAILABLE:
-        argcomplete.autocomplete(parser)  # type: ignore
+        argcomplete.autocomplete(parser)
 
     args = parser.parse_args()
-
-    # # Validation
-    # if not args.openalex_key:
-    #     parser.error("You must provide an OpenAlex API key (-a).")
-    # if not args.skip_scopus and not args.scopus_key:
-    #     parser.error("Scopus API key (-s) is required unless --skip_scopus is specified.")
-
     return args
 
 # =============================

@@ -10,7 +10,7 @@ Modules:
 """
 
 __version__ = "1.0.0"
-__author__ = "Vincenzo Angiulli"
+__author__ = "Giuseppe Defazio, Vincenzo Angiulli"
 __license__ = "MIT"
 
 # Import main classes and functions for easier access
@@ -23,7 +23,6 @@ from .impact import (
     OpenAlexDoi,
     OpenAlexService,
     MyCitationOverview,
-    MyCitationOverviewChunked,
 )
 
 __all__ = [
@@ -35,5 +34,4 @@ __all__ = [
     'OpenAlexDoi',
     'OpenAlexService',
     'MyCitationOverview',
-    'MyCitationOverviewChunked',
     ]

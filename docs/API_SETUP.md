@@ -36,7 +36,7 @@ OpenAlex (https://openalex.org/) is a free, open, and comprehensive index of sch
 - See the policy: https://help.openalex.org/hc/en-us/articles/24397762024087-Pricing
 
 **How to use:**
-- Provide your key with the `--openalex_key` or `-a` flag, or set the `OPENALEX_API_KEY` environment variable.
+- Provide your key with the `--openalex_key` or `-k` flag, or set the `OPENALEX_API_KEY` environment variable.
 - Example: `--openalex_key sk-abc123...`
 
 ---
@@ -82,7 +82,7 @@ python source/impact.py -i input.xlsx -o ./results --openalex_key sk-abc123...
 
 ### Error: "429 Too Many Requests"
 - **Cause:** Exceeded rate limit
-- **Solution:** Wait and retry, or request an API key for higher limits
+- **Solution:** Wait and retry
 
 ### Error: "401 Unauthorized" or "Invalid API Key"
 - **Cause:** Invalid or missing API key
@@ -230,7 +230,7 @@ python source/utils/check_scopus_quota.py YOUR_API_KEY
 Run a simple test search:
 
 ```bash
-python source/author-search.py \
+python source/author_search.py \
   -a "Author Fullname" \
   --openalex_key YOUR_OPENALEX_API_KEY \
   --scopus_key YOUR_API_KEY \
@@ -322,10 +322,10 @@ See [INSTALLATION.md](INSTALLATION.md) for details.
 If you cannot obtain Scopus API access, you can use **OpenAlex only**:
 
 ```bash
-python author-search.py \
+python author_search.py \
   -a "Author Name" \
   --openalex_key YOUR_OPENALEX_API_KEY \
-  --skip_scopus_author_search
+  --skip_scopus
 ```
 
 
