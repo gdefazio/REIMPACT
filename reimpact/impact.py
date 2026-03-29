@@ -477,8 +477,17 @@ def main():
         openalex_citations_of_citing = []
         
         for idx, row in src.iterrows():
-            service = row['Service']
-            logger.info(f"\n📰 Processing service: {service}")
+            # The column can be either 'Author' or 'Service'
+            if 'Service' in row:
+                service = row['Service']
+                logger.info(f"\n📰 Processing service: {service}")
+            elif 'Author' in row:
+                service = row['Author']
+                logger.info(f"\n📰 Processing author: {service}"
+                            )
+            else:
+                logger.warning("Neither 'Service' nor 'Author' column found in row.")
+                service = None
             platform = row['Platform']
             doi_string = row['Primary doi first then others']
             
