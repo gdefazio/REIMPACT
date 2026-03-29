@@ -124,7 +124,7 @@ Examples:
         metavar="FILE"
     )
 
-    behavior_group = parser.add_argument_groups('Behavior Options')
+    behavior_group = parser.add_argument_group('Behavior Options')
     behavior_group.add_argument(
         "-M", "--max_works",
         type=int,
