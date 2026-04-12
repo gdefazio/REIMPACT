@@ -1,0 +1,34 @@
+package:
+  name: reimpact
+  version: {{ environ.get('VERSION', '0.1.0') }}
+
+source:
+  path: ..
+
+build:
+  number: 0
+  script: python -m pip install . --no-deps -vv
+
+requirements:
+  host:
+    - python
+    - pip
+    - setuptools
+  run:
+    - python >=3.8
+    - pyalex>=0.13
+    - pybliometrics
+    - pandas>=2.0.0
+    - openpyxl>=3.1.0
+    - argcomplete>=3.0.0
+    - numpy
+
+test:
+  commands:
+    - reimpact-author-search --help
+    - reimpact-impact --help
+
+about:
+  home: https://github.com/gdefazio/REIMPACT
+  license: CC BY-NC 4.0
+  summary: Python-based tool that performs a systematic assessment of primary and secondary bibliometric impact for RI services, Academia, and authors.

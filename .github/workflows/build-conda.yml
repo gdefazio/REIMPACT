@@ -1,0 +1,41 @@
+name: Build Conda Package
+
+on:
+  push:
+    branches: ["main"]   # ogni commit su qualsiasi branch
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: "3.11"
+          channels: conda-forge,defaults
+
+      - name: Installa conda-build
+        shell: bash -el {0}
+        run: conda install conda-build -y
+
+      - name: Imposta versione
+        shell: bash -el {0}
+        run: echo "VERSION=$(git describe --tags --always --dirty)" >> $GITHUB_ENV
+
+      - name: Build pacchetto conda
+        shell: bash -el {0}
+        run: conda build conda/ -c conda-forge -c gdefazio -c defaults --output-folder ./dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: conda-package
+          path: ./dist/**/*.conda
+          retention-days: 30
