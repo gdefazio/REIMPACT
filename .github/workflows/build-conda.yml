@@ -2,9 +2,9 @@ name: Build Conda Package
 
 on:
   push:
-    branches: [main]   # ogni commit su qualsiasi branch
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 jobs:
   build:
