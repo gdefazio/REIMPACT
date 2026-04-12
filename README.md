@@ -9,6 +9,7 @@ Python package for bibliometric assessment of ELIXIR services and authors, based
 
 ## Main Features
 
+
 ### 1. Author DOI Search
 - Interactive author search and disambiguation on OpenAlex and Scopus
 - Output: Excel file with all DOIs associated to selected authors
