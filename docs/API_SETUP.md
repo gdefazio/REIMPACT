@@ -1,12 +1,12 @@
 # Scopus & OpenAlex API Setup Guide
 
-Complete guide to obtaining and configuring Scopus and OpenAlex API access for AuthorAsService and DOI2impact.
+Complete guide to obtaining and configuring Scopus and OpenAlex API access for REIMPACT.
 
 ---
 
 ## Overview
 
-AuthorAsService and DOI2impact use:
+REIMPACT package uses two main APIs for bibliometric data retrieval and analysis:
 
 - The **Scopus API** (via `pybliometrics`) for commercial bibliometric data
 - The **OpenAlex API** for open, global scholarly metadata
@@ -29,71 +29,40 @@ OpenAlex (https://openalex.org/) is a free, open, and comprehensive index of sch
 
 ## Step 1: Register for OpenAlex API Access
 
-### 1.1 Using the Polite Pool (No API Key)
-- You can use the OpenAlex API without an API key by providing a valid contact email ("mailto") in your requests.
-- This is called the "polite pool" and is suitable for most academic use cases.
+
+### Register for an API Key (The API key is required for all API calls starting February 13, 2026)
+- Go to https://openalex.org and create a free account
+- Copy your API key from https://openalex.org/settings/api
+- See the policy: https://help.openalex.org/hc/en-us/articles/24397762024087-Pricing
 
 **How to use:**
-- Provide your email with the `--openalex_mailto` or `-m` flag in the script, or set the `OPENALEX_MAILTO` environment variable.
-- Example: `--openalex_mailto your.email@domain.com`
-
-**Polite Pool Rate Limit:**
-- 10 requests per second
-- 100k requests per day
-
-### 1.2 Register for an API Key (Recommended for Heavy Use)
-- For higher rate limits (100,000 requests/day), you can request a free API key.
-- **Follow these steps (see also: https://help.openalex.org/hc/en-us/articles/24397762024087-Pricing):**
-  1. Go to https://openalex.org/api and click "Get an API key".
-  2. You will be redirected to the OpenAlex API Key request form.
-  3. Fill in your name, email, organization, and a brief description of your use case (e.g., "Academic research for ELIXIR-IIB project").
-  4. Submit the form.
-  5. Wait for a confirmation email from OpenAlex (usually within 1-2 business days).
-  6. Once approved, you will receive your API key by email.
-- You can also review the official OpenAlex pricing and fair use policy at: https://help.openalex.org/hc/en-us/articles/24397762024087-Pricing
-
-**How to use:**
-- Provide your key with the `--openalex_key` or `-a` flag, or set the `OPENALEX_API_KEY` environment variable.
+- Provide your key with the `--openalex_key` or `-k` flag, or set the `OPENALEX_API_KEY` environment variable.
 - Example: `--openalex_key sk-abc123...`
-
-**API Key Rate Limit:**
-- 100,000 requests per day
-- 75 requests per second
 
 ---
 
 ## Step 2: Configure OpenAlex in Your Scripts
 
-- Always provide a valid email (mailto) for best practice, even if you use an API key.
-- You can set both `OPENALEX_API_KEY` and `OPENALEX_MAILTO` as environment variables for convenience.
+
+
 
 **Windows (PowerShell):**
 ```powershell
 $env:OPENALEX_API_KEY = "your_openalex_key_here"
-$env:OPENALEX_MAILTO = "your.email@domain.com"
 ```
+
 
 **macOS/Linux (Bash):**
 ```bash
 export OPENALEX_API_KEY="your_openalex_key_here"
-export OPENALEX_MAILTO="your.email@domain.com"
 ```
 
 ---
 
 ## Step 3: Verify OpenAlex Access
 
-- Run a simple test with your script:
-
-
 ```bash
-python source/DOI2impact.py -i input.xlsx -o ./results --openalex_mailto your.email@domain.com
-```
-
-- If you use a key:
-
-```bash
-python source/DOI2impact.py -i input.xlsx -o ./results --openalex_key sk-abc123... --openalex_mailto your.email@domain.com
+python source/impact.py -i input.xlsx -o ./results --openalex_key sk-abc123...
 ```
 
 - If you exceed your quota, you will receive HTTP 429 errors (Too Many Requests).
@@ -102,9 +71,7 @@ python source/DOI2impact.py -i input.xlsx -o ./results --openalex_key sk-abc123.
 
 ## OpenAlex API Rate Limits & Best Practices
 
-- **Without API key (polite pool):** 10 req/sec, 1M/month
 - **With API key:** 75 req/sec, 100k/day
-- Always provide a valid email for identification
 - Cache results when possible
 - Avoid unnecessary repeated requests
 - Monitor your usage if running large jobs
@@ -115,11 +82,11 @@ python source/DOI2impact.py -i input.xlsx -o ./results --openalex_key sk-abc123.
 
 ### Error: "429 Too Many Requests"
 - **Cause:** Exceeded rate limit
-- **Solution:** Wait and retry, or request an API key for higher limits
+- **Solution:** Wait and retry
 
 ### Error: "401 Unauthorized" or "Invalid API Key"
 - **Cause:** Invalid or missing API key
-- **Solution:** Double-check your key, or use the polite pool with a valid email
+- **Solution:** Double-check your key
 
 ### Error: "400 Bad Request"
 - **Cause:** Malformed query or missing parameters
@@ -263,9 +230,9 @@ python source/utils/check_scopus_quota.py YOUR_API_KEY
 Run a simple test search:
 
 ```bash
-python source/AuthorAsService.py \
+python source/author_search.py \
   -a "Author Fullname" \
-  --openalex_mailto your.email@domain.com \
+  --openalex_key YOUR_OPENALEX_API_KEY \
   --scopus_key YOUR_API_KEY \
   --max_works 5
 ```
@@ -355,10 +322,10 @@ See [INSTALLATION.md](INSTALLATION.md) for details.
 If you cannot obtain Scopus API access, you can use **OpenAlex only**:
 
 ```bash
-python AuthorAsService.py \
+python author_search.py \
   -a "Author Name" \
-  --mailto your.email@domain.com \
-  --skip_scopus_author_search
+  --openalex_key YOUR_OPENALEX_API_KEY \
+  --skip_scopus
 ```
 
 

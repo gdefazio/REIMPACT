@@ -1,4 +1,4 @@
-name: elixir_impact
+name: reimpact
 channels:
   - gdefazio  # Required for pybliometrics
   - conda-forge
