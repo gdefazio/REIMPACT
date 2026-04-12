@@ -188,6 +188,8 @@ b$from[b$from == 'Neuroscience Institute'] = 'National Research Council'
 b$to[b$to == 'Neuroscience Institute'] = 'National Research Council'
 b$from[b$from == 'Institute of Food Science'] = 'National Research Council'
 b$to[b$to == 'Institute of Food Science'] = 'National Research Council'
+b$from[b$from == 'Istituto di Analisi dei Sistemi ed Informatica Antonio Ruberti'] = 'National Research Council'
+b$to[b$to == 'Istituto di Analisi dei Sistemi ed Informatica Antonio Ruberti'] = 'National Research Council'
 
 b = b[b$from != b$to,]
 cnt.to = b[b$to == 'National Research Council',]
@@ -200,18 +202,82 @@ nodes.order = data.frame(table(rbind(b$from,b$to)))
 nodes.order = nodes.order[order(nodes.order$Freq, decreasing = T),]
 rownames(nodes.order) = 1:dim(nodes.order)[1]
 
+nodes.order$Var1
+new.names = c('CNR', 'INFN', 'UNIMI', 'UNIBA', 'UNIPD', 'UNIBO', 'UNITO', 'IRCCS', 
+              'UNITUS', 'CINECA', 'UNIFI', 'FMACH', 'IOR', 'IZSPLV','IZSPB', 'IIT',
+              'IMN', 'UNINA','COSBI', 'UNIMIB', 'UNITN', 'UNIROMA2', 'CIRPS', 'CIB',
+              'HSANTALUCIA', 'PANACEA-NMR', 'UNISA','CDS','CNISM','SISSA','UNIBG', 
+              'UNIBS', 'UNIMORE','UNIPI','UNIVR','HT','ISS','IZSV','UNIPARTHENOPE',
+              'UNICAL','UNISI')
+supp.tab = data.frame(name=nodes.order$Var1, abbr=new.names)
+write.table(supp.tab,'./supplementary_table_abbr.tsv')
+nodes.order = merge(nodes.order, supp.tab, by.x = 'Var1', by.y = 'name')
+nodes.order = nodes.order[order(nodes.order$Freq, decreasing = T),]
+rownames(nodes.order) = 1:dim(nodes.order)[1]
+
+custom_labels = setNames(nodes.order$abbr, nodes.order$Var1)
+
+miei_colori <- c(
+  "#FF8C42",  # 1  - arancione chiaro (simile al logo Anthropic)
+  "#E63946",  # 2  - rosso vivo
+  "#457B9D",  # 3  - blu acciaio
+  "#2D6A4F",  # 4  - verde scuro
+  "#F4A261",  # 5  - arancione sabbia
+  "#9B2335",  # 6  - rosso bordeaux
+  "#1D3557",  # 7  - blu notte
+  "#52B788",  # 8  - verde menta
+  "#E9C46A",  # 9  - giallo ocra
+  "#6A0572",  # 10 - viola scuro
+  "#0096C7",  # 11 - azzurro
+  "#A7C957",  # 12 - verde lime
+  "#BC6C25",  # 13 - marrone arancio
+  "#8338EC",  # 14 - viola elettrico
+  "#06D6A0",  # 15 - verde acqua
+  "#EF476F",  # 16 - rosa corallo
+  "#118AB2",  # 17 - blu petrolio
+  "#FFD166",  # 18 - giallo dorato
+  "#073B4C",  # 19 - blu quasi nero
+  "#CB997E",  # 20 - rosa antico
+  "#4CC9F0",  # 21 - azzurro chiaro
+  "#7B2D8B",  # 22 - viola medio
+  "#3A86FF",  # 23 - blu brillante
+  "#D62828",  # 24 - rosso mattone
+  "#80B918",  # 25 - verde giallo
+  "#F72585",  # 26 - magenta
+  "#5C4033",  # 27 - marrone scuro
+  "#90E0EF",  # 28 - azzurro pallido
+  "#386641",  # 29 - verde bosco
+  "#FF006E",  # 30 - rosa shocking
+  "#8D99AE",  # 31 - grigio blu
+  "#FFBE0B",  # 32 - giallo ambra
+  "#3D405B",  # 33 - grigio viola
+  "#55A630",  # 34 - verde prato
+  "#FF4800",  # 35 - arancione bruciato
+  "#B5838D",  # 36 - malva
+  "#023E8A",  # 37 - blu reale
+  "#C77DFF",  # 38 - lilla chiaro
+  "#6D6875",  # 39 - grigio viola scuro
+  "#99D98C",  # 40 - verde pistacchio
+  "#AE2012"   # 41 - rosso pompeiano
+)
+
+custom_colors = setNames(miei_colori, nodes.order$Var1)
+
 circos.clear()
-png("Figure_6.png", width = 15, height = 15, res = 300,units = 'cm')
-circos.par(start.degree=25.5, canvas.xlim = c(-2, 2), canvas.ylim = c(-2, 2))
+png("Figure_6_1.png", width = 15, height = 17, res = 300,units = 'cm')
+circos.par(start.degree=25.5, canvas.xlim = c(-1, 1), 
+           canvas.ylim = c(-1, 1), gap.after=2)
 chordDiagram(b, annotationTrack = "grid", 
              preAllocateTracks = 1,
-             order = nodes.order$Var1)
+             order = nodes.order$Var1,
+             grid.col = custom_colors)
 
-circos.track(track.index = 1, 
+circos.track(track.index = 1,
              track.margin = circos.par("track.margin"),
              panel.fun = function(x, y) {
-  circos.text(CELL_META$xcenter, CELL_META$ylim[1], CELL_META$sector.index, 
-              facing = "clockwise", cex=.5, niceFacing = TRUE, adj = c(0, 0.5))
+               label <- custom_labels[CELL_META$sector.index]
+  circos.text(CELL_META$xcenter, CELL_META$ylim[1], label, 
+              facing = "clockwise", cex=.7, niceFacing = TRUE, adj = c(0, 0.5))
 }, bg.border=NA)
 dev.off()
 
