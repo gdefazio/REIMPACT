@@ -9,6 +9,9 @@ build:
   noarch: python
   number: 0
   script: python -m pip install . --no-deps -vv
+  entry_points:
+    - reimpact-author-search = reimpact.author_search:main
+    - reimpact-impact = reimpact.impact:main
 
 requirements:
   host:

@@ -60,3 +60,8 @@ coverage.xml
 
 # VS Code
 .vscode/
+authors_results/Authors_DOIs_OpenAlex.xlsx
+reimpact_results/REIMPACT.xlsx
+reimpact_results/services/Bruno Fosso.csv
+reimpact_results/services/Francesca De Leo.csv
+reimpact_results/services/Graziano Pesole.csv
