@@ -1,7 +1,7 @@
 # REIMPACT - Research infrastructure Evaluation tool for IMPACT
 
 [![Python](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-yellow.svg)](LICENSE)
 
 Python package for bibliometric assessment of ELIXIR services and authors, based on OpenAlex and Scopus.
 
@@ -168,7 +168,6 @@ REIMPACT/
 └── README.md                    # This file
 ```
 
----
 
 ## Command-Line Interface
 
@@ -209,7 +208,7 @@ See [INSTALLATION](docs/INSTALLATION.md) for detailed instructions on:
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the CC BY-NC 4.0 License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
