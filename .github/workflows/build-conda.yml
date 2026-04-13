@@ -72,8 +72,14 @@ jobs:
             exit 1
           fi
 
+          # Build a local conda channel from the downloaded artifact.
+          mkdir -p ./dist/noarch
+          cp "$PKG" ./dist/noarch/
+          conda install -y conda-build
+          conda index ./dist
+
           conda create -n reimpact-test -y python=3.11
-          conda install -n reimpact-test -y "$PKG" -c conda-forge -c defaults
+          conda install -n reimpact-test -y reimpact -c "$PWD/dist" -c conda-forge -c defaults
 
           conda run -n reimpact-test reimpact-author-search --help
           conda run -n reimpact-test reimpact-impact --help
