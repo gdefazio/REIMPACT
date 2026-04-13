@@ -79,7 +79,7 @@ jobs:
           python -m conda_index ./dist
 
           conda create -n reimpact-test -y python=3.11
-          conda install -n reimpact-test -y reimpact -c "$PWD/dist" -c conda-forge -c defaults
+          conda install -n reimpact-test -y reimpact -c "$PWD/dist" -c gdefazio -c conda-forge -c defaults
 
           conda run -n reimpact-test reimpact-author-search --help
           conda run -n reimpact-test reimpact-impact --help
