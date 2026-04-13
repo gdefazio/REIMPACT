@@ -1,6 +1,7 @@
 name: Build Conda Package
 
 on:
+  workflow_dispatch:
   push:
     branches: [master]
   pull_request:
@@ -37,5 +38,42 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: conda-package
-          path: ./dist/**/*.conda
+          path: ./dist/noarch/*.conda
           retention-days: 30
+
+  test-install:
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: conda-package
+          path: ./dist
+
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: "3.11"
+          channels: conda-forge,defaults
+
+      - name: Test install and CLI
+        shell: bash -el {0}
+        run: |
+          PKG=$(find ./dist -name "*.conda" | head -n 1)
+          if [ -z "$PKG" ]; then
+            echo "No conda package found in artifact"
+            exit 1
+          fi
+
+          conda create -n reimpact-test -y python=3.11
+          conda install -n reimpact-test -y "$PKG" -c conda-forge -c defaults
+
+          conda run -n reimpact-test reimpact-author-search --help
+          conda run -n reimpact-test reimpact-impact --help
