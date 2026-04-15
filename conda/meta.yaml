@@ -19,7 +19,7 @@ requirements:
     - pip
     - setuptools
   run:
-    - python >=3.11
+    - python>=3.11
     - pyalex>=0.13
     - pybliometrics
     - pandas>=2.0.0

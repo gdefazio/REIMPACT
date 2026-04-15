@@ -208,7 +208,7 @@ class OpenAlexDoi:
         melt['doi'] = self.doi
         return melt
 
-    def get_citing_works(self) -> tuple:
+    def get_citing_works_requests(self) -> tuple:
         """
         Extracts the works that cite this DOI using the OpenAlex API directly (requests), not pyalex.Works.
         Returns the sum of citations of the citing works and a DataFrame with their institutions.
@@ -266,6 +266,67 @@ class OpenAlexDoi:
         citing_df = pd.DataFrame(rows) if rows else None
         return total_cited_by if total_cited_by > 0 else (0 if citing_df is not None else None), citing_df
 
+    def get_citing_works_pyalex(self, per_page: int = 200) -> tuple:
+        """
+        Extracts works citing this DOI using pyalex.Works().filter(cites=<openalex_id>).
+        Returns the sum of citations of the citing works and a DataFrame with their institutions.
+
+        Returns:
+            tuple: (total_citations_of_citings, citing_institutions_df)
+                - total_citations_of_citings (int): Sum of citations of all citing works.
+                - citing_institutions_df (pd.DataFrame): DataFrame with institutions of citing works' authors.
+        """
+        work_id = self.object.get('id', None)
+        if not work_id:
+            logger.debug("No OpenAlex work ID found for this DOI.")
+            return None, None
+
+        openalex_id = work_id.split('/')[-1] if isinstance(work_id, str) and '/' in work_id else work_id
+        logger.debug(f"work_id: {work_id} | openalex_id: {openalex_id} (pyalex)")
+
+        api_key = os.environ.get('OPENALEX_API_KEY', None)
+        if api_key:
+            pyalex.config.api_key = api_key
+
+        page = 1
+        total_cited_by = 0
+        rows = []
+
+        while True:
+            try:
+                results = pyalex.Works().filter(cites=openalex_id).get(per_page=per_page, page=page)
+            except Exception as e:
+                logger.debug(f"pyalex citing-works retrieval error for DOI {self.doi}: {e}")
+                break
+
+            if not results:
+                break
+
+            for work in results:
+                cited_by_count = work.get('cited_by_count', 0)
+                total_cited_by += cited_by_count
+                doi_of_iter = work.get('doi', None)
+
+                for dict_author in work.get('authorships', []):
+                    insts = dict_author.get('institutions', [])
+                    row = {
+                        'service': self.service,
+                        'platform': self.platform,
+                        'doi': self.doi,
+                        'doiOfCiting': doi_of_iter,
+                        'institution': insts[0].get('display_name', np.nan) if insts else np.nan,
+                        'country': insts[0].get('country_code', np.nan) if insts else np.nan
+                    }
+                    rows.append(row)
+
+            if len(results) < per_page:
+                break
+            page += 1
+
+        logger.debug(f"Total citations of citings for DOI {self.doi} (pyalex): {total_cited_by}")
+        citing_df = pd.DataFrame(rows) if rows else None
+        return total_cited_by if total_cited_by > 0 else (0 if citing_df is not None else None), citing_df
+
 class OpenAlexService:
     def __init__(self, service, platform, doiString: str) -> None:
         self.service = service
@@ -295,7 +356,15 @@ class OpenAlexService:
             logger.warning(f"{len(failed_dois)}/{len(self.doiSplit)} DOI(s) skipped for '{service}'")
         
         self.citations = sum([el.citations for el in self.openAlexDict.values()])
-        OfCiting = [el.get_citing_works() for el in self.openAlexDict.values()]
+        OfCiting = []
+        for el in self.openAlexDict.values():
+            try:
+                OfCiting.append(el.get_citing_works_pyalex())
+            except Exception as e:
+                logger.debug(
+                    f"pyalex citing-works retrieval failed for DOI {el.doi}: {e}. Falling back to requests-based retrieval."
+                )
+                OfCiting.append(el.get_citing_works_requests())
         self.citationsOfCiting = sum([el[0] for el in OfCiting if el[0] is not None])
         self.institutionsOfCiting = pd.concat([el[1] for el in OfCiting if el[1] is not None], axis=0) if any(el[1] is not None for el in OfCiting) else pd.DataFrame()
         del OfCiting

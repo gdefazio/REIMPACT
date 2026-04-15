@@ -650,7 +650,7 @@ def build_author_row(
         source: Data source ("OpenAlex" or "Scopus")
         
     Returns:
-        Dictionary with columns: Author, Applicant, Platform, Number of DOIs, Primary doi first then others
+        Dictionary with columns: Author, Affiliation, Platform, Number of DOIs, Primary doi first then others
     """
     author_name = author.get('display_name', 'Unknown')
     institution = author.get('last_known_institution', '')
@@ -663,13 +663,11 @@ def build_author_row(
     
     return {
         "Author": author_name,
-        "Applicant": institution,
+        "Affiliation": institution,
         "Platform": source,
         "Number of DOIs": len(dois),
         "Primary doi first then others": ", ".join(dois),
     }
-
-
 
 def process_single_author(
     author_name: str,
