@@ -1,21 +1,42 @@
-library(ggplot2)
-library(reshape2)
-library(openxlsx)
-#install.packages("sf")
-library(sf)
-library(ggplot2)
-library(dplyr)
-#install.packages("rnaturalearthdata")
-#install.packages("rnaturalearth")
-library(rnaturalearth)
-library(ggpubr)
-library(circlize)
+pkgs = c(
+  "ggplot2",
+  "reshape2",
+  "openxlsx",
+  "sf",
+  "dplyr",
+  "rnaturalearthdata",
+  "rnaturalearth",
+  "ggpubr",
+  "circlize"
+)
 
-exdir = "/Users/giuseppedefazio/Documents/RTDA_UniBA/progetti/ELIXIR_citations/out_of_github/Serv_Deliv_Plan_citations/gen26/scopus_openalex/SDP_impact.xlsx"
-setwd('/Users/giuseppedefazio/Documents/RTDA_UniBA/progetti/ELIXIR_citations/figures/')
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+for (pkg in pkgs) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    install.packages(pkg)
+  }
+}
+
+suppressPackageStartupMessages({
+  library(ggplot2)
+  library(reshape2)
+  library(openxlsx)
+  library(sf)
+  library(dplyr)
+  library(rnaturalearthdata)
+  library(rnaturalearth)
+  library(ggpubr)
+  library(circlize)
+})
+
+setwd('./figures/')
+sdp_impact = "../output/SDP_REIMPACT.xlsx"
+openalex_results = "../output/Authors_DOIs_OpenAlex.xlsx"
+scopus_results = "../output/Authors_DOIs_Scopus.xlsx"
 
 #### FIGURE 3 ####
-citations = read.xlsx(exdir, sheet = 1, rowNames = T,cols = c(1,4,6,8))
+citations = read.xlsx(sdp_impact, sheet = 1, rowNames = T, cols = c(1,4,6,8))
 citations[is.na(citations)] = 0
 sum(citations$PyBlioCitations)
 citations = aggregate( . ~ Platform, citations, sum)
@@ -45,7 +66,7 @@ ggplot(melt.citations, aes(x=Platform, y=value, fill=variable))+
 ggsave('./Figure_3.png', device = 'png',units = 'cm', width = 27, height = 13)
 
 #### FIGURE 4 ####
-citdf = read.xlsx(exdir, sheet = 1, rowNames = T,cols = c(1,2,6,7,8))
+citdf = read.xlsx(sdp_impact, sheet = 1, rowNames = T, cols = c(1,2,6,7,8))
 citdf1 = citdf
 citdf1[is.na(citdf1)] = 0
 citdf1$Service = 'Total'
@@ -83,9 +104,7 @@ ggplot(m.citdf.h, aes(x=value, y=Service, fill=variable))+
 ggsave('./Figure_4.png', device = 'png',units = 'cm', width = 25, height = 25)
 
 #### FIGURE 5 ####
-
-
-w.cit = read.xlsx(exdir, sheet = 2, rowNames = T,cols = c(1,3,4,7))
+w.cit = read.xlsx(sdp_impact, sheet = 2, rowNames = T,cols = c(1,3,4,7))
 w.cit[is.na(w.cit)] = 0
 colnames(w.cit)[1] = "iso_a2"
 w.cit = w.cit[!is.na(w.cit$iso_a2),]
@@ -93,7 +112,6 @@ w.cit = data.frame(table(w.cit$iso_a2))
 colnames(w.cit)[1] = "iso_a2"
 
 world <- ne_countries(scale = "medium", returnclass = "sf")
-
 world_data <- world %>%
   left_join(w.cit, by = "iso_a2")
 w.cit = merge(w.cit, world, by='iso_a2')[,c(1,2,7)]
@@ -112,8 +130,6 @@ a = ggplot(world_data) +
         axis.ticks = element_blank(),
         panel.background = element_blank(),
         panel.grid.major = element_line(color='grey90'))
-
-
 
 b = ggplot(w.cit, aes(x=Freq, y=sov_a3, fill=Freq))+
   geom_bar(stat = 'identity',show.legend = T)+
@@ -138,9 +154,6 @@ ggarrange(plotlist = c(a,b), ncol = 2, nrow = 1,
 ggsave('./Figure_5.png', device = 'png',units = 'cm', width = 30, height = 11, bg = 'white')
 
 #### FIGURE 6 ####
-
-
-
 members = c("CNR National Research Council of Italy", "CINECA",
             "AREA Science Park",
             "Istituto Zooprofilattico Sperimentale del Piemonte, Liguria e Valle d’Aosta",
@@ -158,7 +171,7 @@ members = c("CNR National Research Council of Italy", "CINECA",
             "Politecnico University of Milan", "Catholic University of the Sacred Heart"
 )
 
-c.data = read.xlsx(exdir, sheet = 2)#, cols = c(2,3,4))
+c.data = read.xlsx(sdp_impact, sheet = 2)#, cols = c(2,3,4))
 c.data = c.data[!is.na(c.data$institution) & c.data$country == 'IT',]
 unique(c.data$institution)
 dois = unique(c.data$doi[!is.na(c.data$doi)])
@@ -210,14 +223,15 @@ new.names = c('CNR', 'INFN', 'UNIMI', 'UNIBA', 'UNIPD', 'UNIBO', 'UNITO', 'IRCCS
               'UNIBS', 'UNIMORE','UNIPI','UNIVR','HT','ISS','IZSV','UNIPARTHENOPE',
               'UNICAL','UNISI')
 supp.tab = data.frame(name=nodes.order$Var1, abbr=new.names)
-write.table(supp.tab,'./supplementary_table_abbr.tsv')
+if (!dir.exists('../Supplementary')) dir.create('../Supplementary', recursive = TRUE)
+write.table(supp.tab,'../Supplementary/supplementary_table_abbr.tsv')
 nodes.order = merge(nodes.order, supp.tab, by.x = 'Var1', by.y = 'name')
 nodes.order = nodes.order[order(nodes.order$Freq, decreasing = T),]
 rownames(nodes.order) = 1:dim(nodes.order)[1]
 
 custom_labels = setNames(nodes.order$abbr, nodes.order$Var1)
 
-miei_colori <- c(
+my_colors <- c(
   "#FF8C42",  # 1  - arancione chiaro (simile al logo Anthropic)
   "#E63946",  # 2  - rosso vivo
   "#457B9D",  # 3  - blu acciaio
@@ -260,8 +274,7 @@ miei_colori <- c(
   "#99D98C",  # 40 - verde pistacchio
   "#AE2012"   # 41 - rosso pompeiano
 )
-
-custom_colors = setNames(miei_colori, nodes.order$Var1)
+custom_colors = setNames(my_colors, nodes.order$Var1)
 
 circos.clear()
 png("Figure_6_1.png", width = 15, height = 17, res = 300,units = 'cm')
@@ -281,9 +294,8 @@ circos.track(track.index = 1,
 }, bg.border=NA)
 dev.off()
 
-
 #### FIGURE 7 ####
-w.citofcit = read.xlsx(exdir, sheet = 3, cols = c(2:7))
+w.citofcit = read.xlsx(sdp_impact, sheet = 3, cols = c(2:7))
 w.citofcit = w.citofcit[!duplicated(w.citofcit) & !is.na(w.citofcit$institution),]
 w.citofcit = data.frame(table(w.citofcit$country))
 w.citofcit[is.na(w.citofcit)] = 0
@@ -337,3 +349,53 @@ ggarrange(plotlist = c(a,b), ncol = 2, nrow = 1,
           labels = c('A)','B)'), common.legend = T,align = 'none')
 
 ggsave('./Figure_7.png', device = 'png',units = 'cm', width = 30, height = 11, bg = 'white')
+
+#### FIGURE 8 ####
+openalex_dois = read.xlsx(openalex_results, sheet = 1, colNames = TRUE)
+scopus_dois = read.xlsx(scopus_results, sheet = 1, colNames = TRUE)
+
+if (ncol(openalex_dois) < 5 || ncol(scopus_dois) < 5) {
+  stop("OpenAlex and Scopus result files must have at least 5 columns.")
+}
+author_col_idx = 1
+doi_col_idx = 5
+
+openalex_df = data.frame(
+  Author = as.character(openalex_dois[[author_col_idx]]),
+  OpenAlex = as.numeric(openalex_dois[[doi_col_idx]]),
+  stringsAsFactors = FALSE
+)
+scopus_df = data.frame(
+  Author = as.character(openalex_dois[[author_col_idx]]),
+  Scopus = as.numeric(scopus_dois[[doi_col_idx]]),
+  stringsAsFactors = FALSE
+)
+
+openalex_df = aggregate(OpenAlex ~ Author, openalex_df, sum, na.rm = TRUE)
+scopus_df = aggregate(Scopus ~ Author, scopus_df, sum, na.rm = TRUE)
+authors_data = merge(openalex_df, scopus_df, by = "Author", all = TRUE)
+authors_data[is.na(authors_data)] = 0
+
+melt.citations <- melt(authors_data, id.vars = "Author")
+colnames(melt.citations) <- c("Author", "variable", "value")
+
+author_levels = unique(authors_data$Author[order(authors_data$OpenAlex, decreasing = TRUE)])
+melt.citations$Author <- factor(melt.citations$Author, levels = author_levels)
+
+fig <- ggplot(melt.citations, aes(x=Author, y=value, fill=variable))+
+  geom_bar(stat = "identity", position = 'dodge') +
+  scale_fill_manual(labels=c('OpenAlex', 'Scopus'),
+          values = c('orange2', 'cornflowerblue'),
+          breaks = c('OpenAlex', 'Scopus'))+
+  scale_y_continuous('DOIs', labels=scales::comma, expand = expansion(add = c(0, 30))) +
+  xlab('Author') +
+  geom_text(aes(label=value), vjust = -.5, 
+      position = position_dodge(width = 0.9), fontface = 'bold', size = 4) +
+  theme(legend.title = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = 'grey19'),
+    axis.text = element_text(face = 'bold', size=11),
+    axis.title=element_text(face = 'bold.italic', size=10),
+    legend.text = element_text(face = 'bold.italic', size=10))
+
+ggsave('./Figure_8.png', fig, device = 'png', units = 'cm', width = 27, height = 13)

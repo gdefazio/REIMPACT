@@ -12,6 +12,7 @@ import os
 import sys
 import argparse
 import logging
+import time
 import pandas as pd
 import pyalex
 from pybliometrics.scopus import (
@@ -98,10 +99,11 @@ Examples:
     )
 
     # API configuration
-    api_group = parser.add_mutually_exclusive_group(required=True)
+    api_group = parser.add_argument_group('API Configuration')
     api_group.add_argument(
         "-k", "--openalex_key",
         type=str,
+        required=True,
         default=os.getenv('OPENALEX_API_KEY'),
         help="OpenAlex API key (required, or set OPENALEX_API_KEY env var)",
         metavar="OPENALEX_API_KEY"
@@ -175,24 +177,62 @@ class OpenAlexAuthorSearch:
         per_page: Results per API page (1-200)
     """
     
-    def __init__(self, max_results: int = 25, per_page: int = 25):
+    def __init__(
+        self,
+        max_results: int = 25,
+        per_page: int = 25,
+        max_retries: int = 3,
+        base_retry_delay: float = 1.0,
+    ):
         self.max_results = max_results
         self.per_page = max(1, min(per_page, 200))
+        self.max_retries = max(0, max_retries)
+        self.base_retry_delay = max(0.1, base_retry_delay)
+
+    @staticmethod
+    def _is_retryable_openalex_error(exc: Exception) -> bool:
+        """Return True for transient OpenAlex errors that should be retried."""
+        msg = str(exc).lower()
+        retry_signals = [
+            "503",
+            "service unavailable",
+            "too many 503",
+            "max retries exceeded",
+            "temporarily unavailable",
+        ]
+        return any(signal in msg for signal in retry_signals)
 
     def search(self, query: str) -> List[dict]:
         """Search for authors matching query string."""
         cleaned = (query or "").strip()
         if not cleaned:
             raise ValueError("Author query cannot be empty.")
-        results: List[dict] = []
-        query_obj = pyalex.Authors().search(cleaned)
-        iterator = query_obj.paginate(method="page", per_page=self.per_page)
-        for page in iterator:
-            for raw_author in page:
-                results.append(self._normalize_author(raw_author))
-                if len(results) >= self.max_results:
-                    return results
-        return results
+        for attempt in range(self.max_retries + 1):
+            try:
+                results: List[dict] = []
+                query_obj = pyalex.Authors().search(cleaned)
+                iterator = query_obj.paginate(method="page", per_page=self.per_page)
+                for page in iterator:
+                    for raw_author in page:
+                        results.append(self._normalize_author(raw_author))
+                        if len(results) >= self.max_results:
+                            return results
+                return results
+            except Exception as exc:
+                is_last_attempt = attempt >= self.max_retries
+                if not self._is_retryable_openalex_error(exc) or is_last_attempt:
+                    raise
+                delay = self.base_retry_delay * (2 ** attempt)
+                logger.warning(
+                    "OpenAlex temporary error during author search: %s. Retrying in %.1fs (%d/%d).",
+                    exc,
+                    delay,
+                    attempt + 1,
+                    self.max_retries,
+                )
+                time.sleep(delay)
+
+        return []
 
     @staticmethod
     def _normalize_author(raw_author: dict) -> dict:
@@ -650,7 +690,7 @@ def build_author_row(
         source: Data source ("OpenAlex" or "Scopus")
         
     Returns:
-        Dictionary with columns: Author, Affiliation, Platform, Number of DOIs, Primary doi first then others
+        Dictionary with columns: Author, Affiliation, Platform, Primary doi first then others, Number of DOIs
     """
     author_name = author.get('display_name', 'Unknown')
     institution = author.get('last_known_institution', '')
@@ -665,8 +705,8 @@ def build_author_row(
         "Author": author_name,
         "Affiliation": institution,
         "Platform": source,
-        "Number of DOIs": len(dois),
         "Primary doi first then others": ", ".join(dois),
+        "Number of DOIs": len(dois)
     }
 
 def process_single_author(

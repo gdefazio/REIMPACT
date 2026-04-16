@@ -9,14 +9,15 @@ Python package for bibliometric assessment of ELIXIR services and authors, based
 
 ## Main Features
 
-
 ### 1. Author DOI Search
+
 - Interactive author search and disambiguation on OpenAlex and Scopus
 - Output: Excel file with all DOIs associated to selected authors
 - Supports single author or batch mode (Excel file with author list)
 - **CLI Command**: `reimpact-author-search`
 
 ### 2. Impact Assessment via DOIs
+
 - Analyzes bibliometric impact (citations, institutions, aggregated metrics) starting from a list of DOIs
 - Input: Excel file produced by Author DOI Search or any file with a DOI column
 - Output: Excel report with impact statistics per author/service
@@ -27,6 +28,7 @@ Python package for bibliometric assessment of ELIXIR services and authors, based
 ## Quick Start
 
 ### Installation
+
 ```bash
 # Clone the repository
 git clone https://github.com/gdefazio/REIMPACT.git
@@ -46,16 +48,16 @@ See [INSTALLATION](docs/INSTALLATION.md) for detailed instructions.
 
 ## Recommended Workflow
 
-
 1. **Author DOI Search**
+
    ```bash
    reimpact-author-search \
     --input_authors test/authors_template.xlsx \
     --openalex_key YOUR_OPENALEX_API_KEY \
     --scopus_key YOUR_SCOPUS_API_KEY
    ```
-
 2. **Impact Assessment via DOI**
+
    ```bash
    reimpact-impact \
      --input_excel authors_results/Authors_DOIs_OpenAlex.xlsx \
@@ -67,8 +69,8 @@ See [INSTALLATION](docs/INSTALLATION.md) for detailed instructions.
 
 ## Usage Examples
 
-
 ### Search DOIs for a Single Author
+
 ```bash
 reimpact-author-search \
   --author "Mario Rossi" \
@@ -77,6 +79,7 @@ reimpact-author-search \
 ```
 
 ### Search DOIs for a List of Authors
+
 ```bash
 reimpact-author-search \
   --input_authors test/authors_template.xlsx \
@@ -85,6 +88,7 @@ reimpact-author-search \
 ```
 
 ### Impact Assessment from Authors DOI File
+
 ```bash
 reimpact-impact \
   --input_excel authors_results/Authors_DOIs_OpenAlex.xlsx \
@@ -94,6 +98,7 @@ reimpact-impact \
 ```
 
 ### Impact Assessment from Services DOI File
+
 ```bash
   reimpact-impact \
   --input_excel test/services_template.xlsx \
@@ -102,38 +107,26 @@ reimpact-impact \
   --scopus_key YOUR_SCOPUS_API_KEY
 ```
 
-### Using as Python Library
-```python
-from source import OpenAlexAuthorSearch, fetch_author_dois_openalex
-
-# Search for authors (API key required)
-searcher = OpenAlexAuthorSearch(api_key="YOUR_OPENALEX_API_KEY")
-candidates = searcher.search("Mario Rossi")
-
-# Fetch DOIs
-if candidates:
-    author_id = candidates[0]['id']
-    dois = fetch_author_dois_openalex(author_id, max_works=50, api_key="YOUR_OPENALEX_API_KEY")
-    print(f"Found {len(dois)} DOIs")
-```
-
----
-
 ## Input File Format
 
-
 ### For author-search module
+
 Excel file with a column "Author" (or similar):
-| Author        |
-|---------------|
-| Mario Rossi   |
-| Anna Bianchi  |
+
+| Author       |
+| ------------ |
+| Mario Rossi  |
+| Anna Bianchi |
 
 ### For impact module
-Excel file with at least a column "Primary doi first then others" (or "DOI"):
-| Service      | Applicant          | Platform     | Primary doi first then others     |
-|--------------|--------------------|--------------|-----------------------------------|
-| ELIXIR       | University of Bari | Data         | 10.1234/abc, 10.5678/def, ...     |
+
+Excel file with at least 4 columns in this positional order:
+
+| Service | Applicant          | Platform | Primary doi first then others |
+| ------- | ------------------ | -------- | ----------------------------- |
+| ELIXIR  | University of Bari | Data     | 10.1234/abc, 10.5678/def, ... |
+
+Only the 1st and 4th columns are mandatory (service/author and DOI list); rows missing either of these are skipped.
 
 ---
 
@@ -142,7 +135,7 @@ Excel file with at least a column "Primary doi first then others" (or "DOI"):
 Instead of passing API keys as arguments, you can set environment variables:
 
 ```bash
-export OPENALEX_API_KEY="your_openalex_key"        # Required: for 100k cred/day
+export OPENALEX_API_KEY="your_openalex_key"        # Required
 export SCOPUS_API_KEY="your_scopus_key"            # Required for Scopus access
 ```
 
@@ -152,7 +145,7 @@ export SCOPUS_API_KEY="your_scopus_key"            # Required for Scopus access
 
 ```
 REIMPACT/
-├── source/
+├── reimpact/
 │   ├── __init__.py              # Package initialization
 │   ├── author-search.py         # Author DOI search module
 │   ├── impact.py                # Impact assessment module
@@ -168,12 +161,12 @@ REIMPACT/
 └── README.md                    # This file
 ```
 
-
 ## Command-Line Interface
 
 After installation, two commands are available:
 
 ### `reimpact-author-search`
+
 Search for authors and retrieve their publication DOIs.
 
 ```bash
@@ -181,6 +174,7 @@ reimpact-author-search --help
 ```
 
 ### `reimpact-impact`
+
 Analyze bibliometric impact from a list of DOIs.
 
 ```bash
@@ -192,6 +186,7 @@ reimpact-impact --help
 ## Installation
 
 See [INSTALLATION](docs/INSTALLATION.md) for detailed instructions on:
+
 - Environment setup
 - Package installation
 - API configuration
@@ -222,6 +217,7 @@ This project is licensed under the CC BY-NC 4.0 License - see the [LICENSE](LICE
 ## Support
 
 For issues or questions:
+
 - Open an issue on [GitHub](https://github.com/gdefazio/REIMPACT/issues)
 - Check the documentation in [docs/](docs/)
 - Contact the authors via email

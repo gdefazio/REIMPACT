@@ -91,7 +91,7 @@ Examples:
     )
 
     # API configuration
-    api_group = parser.add_mutually_exclusive_group(required=True)
+    api_group = parser.add_argument_group('API Configuration')
     api_group.add_argument(
         "-k", "--openalex_key",
         type=str,
@@ -148,8 +148,9 @@ _OPENALEX_SESSION = requests.Session()
 _OPENALEX_RATE_LOG = deque(maxlen=200)
 
 class OpenAlexDoi:
-    def __init__(self, service, platform, doi) -> None:
+    def __init__(self, service, applicant, platform, doi) -> None:
         self.service = service
+        self.applicant = applicant
         self.platform = platform
         # Clean DOI to handle URL-encoded strings
         cleaned_doi = sanitize_doi(doi)
@@ -204,6 +205,7 @@ class OpenAlexDoi:
         melt = pd.DataFrame(melt_info, columns=['institution', 'country'])
         melt['weight'] = self.citations
         melt['service'] = self.service
+        melt['applicant'] = self.applicant
         melt['platform'] = self.platform
         melt['doi'] = self.doi
         return melt
@@ -250,13 +252,25 @@ class OpenAlexDoi:
                 total_cited_by += cited_by_count
                 doiOfIter = work.get('doi', None)
                 for dict_author in work.get('authorships', []):
+                    insts = dict_author.get('institutions', []) if isinstance(dict_author, dict) else []
+                    if not insts or not isinstance(insts[0], dict):
+                        continue
+                    institution = insts[0].get('display_name', None)
+                    country = insts[0].get('country_code', None)
+                    if not institution or not country:
+                        continue
+                    if isinstance(institution, str) and not institution.strip():
+                        continue
+                    if isinstance(country, str) and not country.strip():
+                        continue
                     row = {
                         'service': self.service,
+                        'applicant': self.applicant,
                         'platform': self.platform,
                         'doi': self.doi,
                         'doiOfCiting': doiOfIter,
-                        'institution': dict_author['institutions'][0]['display_name'] if dict_author['institutions'] else np.nan,
-                        'country': dict_author['institutions'][0]['country_code'] if dict_author['institutions'] else np.nan
+                        'institution': institution,
+                        'country': country
                     }
                     rows.append(row)
             if len(results) < params["per-page"]:
@@ -287,21 +301,17 @@ class OpenAlexDoi:
         api_key = os.environ.get('OPENALEX_API_KEY', None)
         if api_key:
             pyalex.config.api_key = api_key
-
         page = 1
         total_cited_by = 0
         rows = []
-
         while True:
             try:
                 results = pyalex.Works().filter(cites=openalex_id).get(per_page=per_page, page=page)
             except Exception as e:
                 logger.debug(f"pyalex citing-works retrieval error for DOI {self.doi}: {e}")
                 break
-
             if not results:
                 break
-
             for work in results:
                 cited_by_count = work.get('cited_by_count', 0)
                 total_cited_by += cited_by_count
@@ -309,27 +319,37 @@ class OpenAlexDoi:
 
                 for dict_author in work.get('authorships', []):
                     insts = dict_author.get('institutions', [])
+                    if not insts or not isinstance(insts[0], dict):
+                        continue
+                    institution = insts[0].get('display_name', None)
+                    country = insts[0].get('country_code', None)
+                    if not institution or not country:
+                        continue
+                    if isinstance(institution, str) and not institution.strip():
+                        continue
+                    if isinstance(country, str) and not country.strip():
+                        continue
                     row = {
                         'service': self.service,
+                        'applicant': self.applicant,
                         'platform': self.platform,
                         'doi': self.doi,
                         'doiOfCiting': doi_of_iter,
-                        'institution': insts[0].get('display_name', np.nan) if insts else np.nan,
-                        'country': insts[0].get('country_code', np.nan) if insts else np.nan
+                        'institution': institution,
+                        'country': country
                     }
                     rows.append(row)
-
             if len(results) < per_page:
                 break
             page += 1
-
         logger.debug(f"Total citations of citings for DOI {self.doi} (pyalex): {total_cited_by}")
         citing_df = pd.DataFrame(rows) if rows else None
         return total_cited_by if total_cited_by > 0 else (0 if citing_df is not None else None), citing_df
 
 class OpenAlexService:
-    def __init__(self, service, platform, doiString: str) -> None:
+    def __init__(self, service, applicant, platform, doiString: str) -> None:
         self.service = service
+        self.applicant = applicant
         self.platform = platform
         self.doiSplit = [el.strip() for el in doiString.split(',')]
         
@@ -340,7 +360,7 @@ class OpenAlexService:
         for doi in self.doiSplit:
             doi = sanitize_doi(doi)
             try:
-                self.openAlexDict[doi] = OpenAlexDoi(service, platform, doi)
+                self.openAlexDict[doi] = OpenAlexDoi(service, applicant, platform, doi)
             except Exception as e:
                 logger.warning(f"{e}")
                 failed_dois.append(doi)
@@ -366,7 +386,20 @@ class OpenAlexService:
                 )
                 OfCiting.append(el.get_citing_works_requests())
         self.citationsOfCiting = sum([el[0] for el in OfCiting if el[0] is not None])
-        self.institutionsOfCiting = pd.concat([el[1] for el in OfCiting if el[1] is not None], axis=0) if any(el[1] is not None for el in OfCiting) else pd.DataFrame()
+        self.institutionsOfCiting = pd.concat(
+            [el[1] for el in OfCiting if el[1] is not None],
+            axis=0,
+            ignore_index=True
+        ) if any(el[1] is not None for el in OfCiting) else pd.DataFrame()
+        if not self.institutionsOfCiting.empty:
+            dedup_cols = [
+                col for col in ['service', 'applicant', 'platform', 'doi', 'doiOfCiting', 'institution', 'country']
+                if col in self.institutionsOfCiting.columns
+            ]
+            if dedup_cols:
+                self.institutionsOfCiting = self.institutionsOfCiting.drop_duplicates(
+                    subset=dedup_cols
+                ).reset_index(drop=True)
         del OfCiting
         self.institutions = None
         try:
@@ -374,7 +407,7 @@ class OpenAlexService:
                                           axis=0,
                                           ignore_index=True).drop_duplicates().reset_index(drop=True)
         except ValueError:
-            print(service, doiString)
+            logger.error("Error occurred while processing institutions for service '%s' and DOIs '%s'", service, doiString)
         if len(self.openAlexDict) > 1:
             citdf_list = []
             for doi, obj in self.openAlexDict.items():
@@ -402,9 +435,19 @@ class MyCitationOverview(CitationOverview):
                  end=dt.now().timetuple()[0],
                  id_type='doi'):
         date_range = f"{start}-{end}"
-        super().__init__(identifier=identifier, date=date_range,
-                         id_type=id_type,
-                         apykey=apykey)
+        try:
+            super().__init__(identifier=identifier, date=date_range,
+                             id_type=id_type,
+                             apykey=apykey)
+        except KeyError as e:
+            # pybliometrics can raise KeyError('MyCitationOverview') when the runtime environment/package setup is inconsistent.
+            if str(e).strip("'") == 'MyCitationOverview':
+                raise RuntimeError(
+                    "Scopus disabled: incompatible pybliometrics runtime detected "
+                    "(KeyError: MyCitationOverview). Activate the correct environment "
+                    "and ensure a compatible pybliometrics version is installed."
+                ) from e
+            raise
         self.start = start
         self.end = end
         self.servname = servname
@@ -450,6 +493,8 @@ class MyCitationOverviewChunked:
                 )
                 self._instances.append(inst)
             except Exception as e:
+                if isinstance(e, RuntimeError) and 'Scopus disabled: incompatible pybliometrics runtime detected' in str(e):
+                    raise
                 error_name = type(e).__name__
                 logger.debug(f"Chunk {i//25 + 1} failed with error: {error_name}: {e}\n{traceback.format_exc()}")
 
@@ -465,6 +510,8 @@ class MyCitationOverviewChunked:
                         )
                         self._instances.append(inst)
                     except Exception as doi_error:
+                        if isinstance(doi_error, RuntimeError) and 'Scopus disabled: incompatible pybliometrics runtime detected' in str(doi_error):
+                            raise
                         if hasattr(pybliometrics.scopus, 'exception'):
                             if isinstance(doi_error, pybliometrics.scopus.exception.Scopus404Error):
                                 logger.warning(f"DOI {doi}: Not found in Scopus (404)")
@@ -531,7 +578,32 @@ def main():
     # Load input
     try:
         src = pd.read_excel(args.input_excel)
-        src = src[~src['Primary doi first then others'].isna()]
+        if src.shape[1] < 4:
+            logger.error(
+                "Input Excel must have at least 4 columns in positional order: "
+                "[Service, Applicant, Platform, Primary doi first then others]."
+            )
+            sys.exit(1)
+        service_col = src.columns[0]
+        applicant_col = src.columns[1]
+        platform_col = src.columns[2]
+        doi_col = src.columns[3]
+        initial_rows = len(src)
+        src = src[src[service_col].notna()]
+        src = src[src[service_col].astype(str).str.strip() != ""]
+        src = src[src[doi_col].notna()]
+        src = src[src[doi_col].astype(str).str.strip() != ""]
+        dropped_rows = initial_rows - len(src)
+        if dropped_rows > 0:
+            logger.warning(
+                f"Dropped {dropped_rows} row(s): mandatory columns are first (service/author) and fourth (DOIs)."
+            )
+        if src.empty:
+            logger.error(
+                "No valid input rows found after enforcing mandatory first (service/author) "
+                "and fourth (DOIs) columns."
+            )
+            sys.exit(1)
     except Exception as e:
         logger.error(f"Failed to load input Excel: {e}")
         sys.exit(1)
@@ -544,33 +616,31 @@ def main():
         OpenAlexServiceDict = {}
         openalex_citations = []
         openalex_citations_of_citing = []
+        openalex_any_success = False
         
         for idx, row in src.iterrows():
-            # The column can be either 'Author' or 'Service'
-            if 'Service' in row:
-                service = row['Service']
-                logger.info(f"\n📰 Processing service: {service}")
-            elif 'Author' in row:
-                service = row['Author']
-                logger.info(f"\n📰 Processing author: {service}"
-                            )
-            else:
-                logger.warning("Neither 'Service' nor 'Author' column found in row.")
-                service = None
-            platform = row['Platform']
-            doi_string = row['Primary doi first then others']
-            
+            service = row[service_col]
+            applicant = row[applicant_col]
+            platform = row[platform_col]
+            doi_string = row[doi_col]
+            logger.info(f"\n📰 Processing service: {service}")
+
             try:
-                service_obj = OpenAlexService(service, platform, doi_string)
+                service_obj = OpenAlexService(service, applicant, platform, doi_string)
                 OpenAlexServiceDict[service] = service_obj
                 openalex_citations.append(service_obj.citations)
                 openalex_citations_of_citing.append(service_obj.citationsOfCiting)
+                openalex_any_success = True
                 logger.info(f"\r📰 Processing service: {service} ✅")
             except Exception as e:
                 logger.warning(f"OpenAlex retrieval failed for service '{service}': {e}")
                 OpenAlexServiceDict[service] = None
                 openalex_citations.append(np.nan)
                 openalex_citations_of_citing.append(np.nan)
+
+        if not openalex_any_success and not search_config.get('scopus', False):
+            logger.error("Stopping execution: OpenAlex is unavailable and no other database is selected.")
+            return 1
         
         logger.info('\n🔍  Starting OpenAlex citations data elaboration...')
         src['OpenAlexCitations'] = openalex_citations
@@ -588,12 +658,21 @@ def main():
         institutionsOfCitings = pd.concat(
             [el.institutionsOfCiting for el in OpenAlexServiceDict.values() 
              if el is not None and el.institutionsOfCiting is not None and not el.institutionsOfCiting.empty], 
-            axis=0
+            axis=0,
+            ignore_index=True
         ) if any(el is not None and el.institutionsOfCiting is not None and not el.institutionsOfCiting.empty for el in OpenAlexServiceDict.values()) else pd.DataFrame()
+        if not institutionsOfCitings.empty:
+            dedup_cols = [
+                col for col in ['service', 'applicant', 'platform', 'doi', 'doiOfCiting', 'institution', 'country']
+                if col in institutionsOfCitings.columns
+            ]
+            if dedup_cols:
+                institutionsOfCitings = institutionsOfCitings.drop_duplicates(
+                    subset=dedup_cols
+                ).reset_index(drop=True)
     else:
         OpenAlexServiceDict = {}
-        src['OpenAlexCitations'] = np.nan
-        src['OpenAlexCitationsOfCiting'] = np.nan
+        src = src.drop(columns=['OpenAlexCitations', 'OpenAlexCitationsOfCiting'], errors='ignore')
         institutions = pd.DataFrame()
         institutionsOfCitings = pd.DataFrame()
     
@@ -603,12 +682,13 @@ def main():
         logger.info('\n🔍  Starting Scopus information retrieval...')
         PyBlioInstanceDict = {}
         pyblio_citations = []
+        scopus_env_mismatch = False
         _scopus_start = dt.now().timetuple()[0] - 20
         _scopus_end = dt.now().timetuple()[0]
         try:
             for idx, row in src.iterrows():
-                service = row['Service']
-                doi_string = row['Primary doi first then others']
+                service = row[service_col]
+                doi_string = row[doi_col]
                 identifiers = [el.strip() for el in str(doi_string).split(',') if el and el.strip()]
                 try:
                     inst = MyCitationOverviewChunked(
@@ -623,10 +703,20 @@ def main():
                     pyblio_citations.append(inst.grandTotal)
                     logger.debug(f"✅ Successfully processed Scopus: {service}")
                 except Exception as exc:
+                    if isinstance(exc, RuntimeError) and 'Scopus disabled: incompatible pybliometrics runtime detected' in str(exc):
+                        logger.error(str(exc))
+                        scopus_env_mismatch = True
+                        break
                     logger.warning(f"⚠️  Scopus retrieval failed for service '{service}': {exc}")
                     PyBlioInstanceDict[service] = None
                     pyblio_citations.append(np.nan)
-            src['PyBlioCitations'] = pyblio_citations
+            if scopus_env_mismatch:
+                scopus_failed = True
+                if not search_config.get('openalex', False):
+                    logger.error("Stopping execution: Scopus is unavailable and no other database is selected.")
+                    return 1
+            else:
+                src['PyBlioCitations'] = pyblio_citations
         except Exception as exc:
             logger.error(f"❌ Scopus block failed: {exc}. Will save only OpenAlex results.")
             scopus_failed = True
