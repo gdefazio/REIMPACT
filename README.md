@@ -107,6 +107,21 @@ reimpact-impact \
   --scopus_key YOUR_SCOPUS_API_KEY
 ```
 
+### Resume and Large Outputs
+
+By default, `reimpact-impact` processes all services from scratch and does not use checkpoints. Add `--resume` to reuse completed OpenAlex service results and save checkpoints during processing. Checkpoints are stored next to the output file in `.reimpact_checkpoints/openalex/`.
+
+Excel worksheets can contain at most 1,048,576 rows, including the header. If an impact DataFrame exceeds this limit, it is split across multiple worksheets in the same Excel workbook. A complete `.full.tsv` fallback is also written for DataFrames that exceed Excel's row or column limits.
+
+The author DOI search module also writes a `.full.tsv` fallback when a cell exceeds Excel's 32,767-character limit; the Excel output is retained but that cell may be truncated.
+
+```bash
+reimpact-impact \
+  --input_excel authors_results/Authors_DOIs_OpenAlex.xlsx \
+  --openalex_key YOUR_OPENALEX_API_KEY \
+  --resume
+```
+
 ## Input File Format
 
 ### For author-search module
