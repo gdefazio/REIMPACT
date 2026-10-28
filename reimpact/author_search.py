@@ -45,6 +45,9 @@ except ImportError:
 # ============================================================================
 logger = logging.getLogger(__name__)
 
+# Excel maximum number of characters allowed in a single cell.
+EXCEL_CELL_CHAR_LIMIT = 32767
+
 # Export control for package integration
 __all__ = [
     'OpenAlexAuthorSearch',
@@ -709,6 +712,24 @@ def build_author_row(
         "Number of DOIs": len(dois)
     }
 
+
+def _excel_cell_limit_exceeded(df: pd.DataFrame, limit: int = EXCEL_CELL_CHAR_LIMIT) -> bool:
+    """Return True when at least one string cell exceeds Excel character limit."""
+    for col in df.columns:
+        series = df[col]
+        if series.dtype != object:
+            continue
+        for value in series:
+            if isinstance(value, str) and len(value) > limit:
+                return True
+    return False
+
+
+def _tsv_fallback_path(excel_path: str) -> str:
+    """Build a lossless TSV fallback path from an Excel output path."""
+    root, _ = os.path.splitext(excel_path)
+    return f"{root}.full.tsv"
+
 def process_single_author(
     author_name: str,
     max_works: Optional[int],
@@ -1048,6 +1069,15 @@ def main():
         # Create directory if needed
         os.makedirs(os.path.dirname(openalex_file), exist_ok=True)
         df_openalex.to_excel(openalex_file, index=False, engine='openpyxl')
+
+        if _excel_cell_limit_exceeded(df_openalex):
+            openalex_tsv = _tsv_fallback_path(openalex_file)
+            df_openalex.to_csv(openalex_tsv, sep='\t', index=False, encoding='utf-8')
+            logger.warning(
+                "OpenAlex output exceeds Excel cell limit (%d chars). Excel file may be truncated; full data also saved as TSV: %s",
+                EXCEL_CELL_CHAR_LIMIT,
+                openalex_tsv,
+            )
         
         total_dois = sum(
             len(row.get("Primary doi first then others", "").split(", "))
@@ -1067,6 +1097,15 @@ def main():
         # Create directory if needed
         os.makedirs(os.path.dirname(scopus_file), exist_ok=True)
         df_scopus.to_excel(scopus_file, index=False, engine='openpyxl')
+
+        if _excel_cell_limit_exceeded(df_scopus):
+            scopus_tsv = _tsv_fallback_path(scopus_file)
+            df_scopus.to_csv(scopus_tsv, sep='\t', index=False, encoding='utf-8')
+            logger.warning(
+                "Scopus output exceeds Excel cell limit (%d chars). Excel file may be truncated; full data also saved as TSV: %s",
+                EXCEL_CELL_CHAR_LIMIT,
+                scopus_tsv,
+            )
         
         total_dois = sum(
             len(row.get("Primary doi first then others", "").split(", "))

@@ -10,17 +10,19 @@ import sys
 import os
 import re
 import logging
+import time
 import pyalex
 import pybliometrics.scopus
 from pybliometrics.scopus import CitationOverview
 from functools import reduce
 from datetime import datetime as dt
-from typing import Optional
+from typing import Optional, Dict, Mapping
 import pandas as pd
 import numpy as np
 import argparse
 import requests
 from collections import deque
+from urllib.parse import quote
 from .utils.utils import (
     setup_logging,
     validate_file,
@@ -40,6 +42,9 @@ except ImportError:
 # LOGGING SETUP
 # =============================
 logger = logging.getLogger(__name__)
+
+EXCEL_MAX_ROWS = 1048576
+EXCEL_MAX_COLS = 16384
 
 __all__ = [
     "OpenAlexDoi",
@@ -115,6 +120,11 @@ Examples:
         help="Skip Scopus search (use when outside institutional network)"
     )
     behavior_group.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume OpenAlex processing from existing checkpoints"
+    )
+    behavior_group.add_argument(
         "--openalex_data_version",
         type=int,
         choices=[1, 2],
@@ -146,6 +156,295 @@ Examples:
 # =============================
 _OPENALEX_SESSION = requests.Session()
 _OPENALEX_RATE_LOG = deque(maxlen=200)
+_OPENALEX_LAST_REQUEST_TS = 0.0
+_OPENALEX_COOLDOWN_UNTIL = 0.0
+
+
+def _safe_service_filename(service_name: str) -> str:
+    """Return a filesystem-safe name for per-service checkpoint artifacts."""
+    return re.sub(r"[/@)(]", "_", str(service_name))
+
+
+def _openalex_checkpoint_dir(output_path: str) -> str:
+    """Return checkpoint directory colocated with the output file."""
+    output_dir = os.path.dirname(output_path) if os.path.dirname(output_path) else "."
+    return os.path.join(output_dir, ".reimpact_checkpoints", "openalex")
+
+
+def _openalex_summary_checkpoint_path(checkpoint_dir: str) -> str:
+    """Path to OpenAlex summary checkpoint table."""
+    return os.path.join(checkpoint_dir, "summary.tsv")
+
+
+def _persist_openalex_summary_checkpoint(checkpoint_path: str, records: Dict[str, dict]) -> None:
+    """Persist OpenAlex checkpoint rows atomically as TSV."""
+    if not records:
+        return
+    df = pd.DataFrame(records.values())
+    tmp_path = f"{checkpoint_path}.tmp"
+    df.to_csv(tmp_path, sep='\t', index=False, encoding='utf-8')
+    os.replace(tmp_path, checkpoint_path)
+
+
+def _load_openalex_summary_checkpoint(checkpoint_path: str) -> Dict[str, dict]:
+    """Load OpenAlex checkpoint rows keyed by service name."""
+    if not os.path.exists(checkpoint_path):
+        return {}
+    try:
+        ckpt_df = pd.read_csv(checkpoint_path, sep='\t', dtype=str)
+        records: Dict[str, dict] = {}
+        for _, row in ckpt_df.iterrows():
+            service = str(row.get('service', '')).strip()
+            if not service:
+                continue
+            citations = row.get('openalex_citations', None)
+            citations_of_citing = row.get('openalex_citations_of_citing', None)
+            records[service] = {
+                'service': service,
+                'applicant': row.get('applicant', ''),
+                'platform': row.get('platform', ''),
+                'status': row.get('status', ''),
+                'openalex_citations': float(citations) if citations not in (None, '', 'nan') else np.nan,
+                'openalex_citations_of_citing': float(citations_of_citing) if citations_of_citing not in (None, '', 'nan') else np.nan,
+            }
+        return records
+    except Exception as exc:
+        logger.warning(f"Unable to load OpenAlex checkpoint from {checkpoint_path}: {exc}")
+        return {}
+
+
+def _is_transient_openalex_error(exc: Exception) -> bool:
+    """Return True for transient OpenAlex/network errors that are worth retrying."""
+    msg = str(exc).lower()
+    transient_signals = [
+        "temporary failure in name resolution",
+        "name resolution",
+        "failed to resolve",
+        "max retries exceeded",
+        "connection aborted",
+        "connection reset",
+        "read timed out",
+        "connect timeout",
+        "too many requests",
+        "429",
+        "500",
+        "502",
+        "503",
+        "504",
+        "service unavailable",
+    ]
+    return any(signal in msg for signal in transient_signals)
+
+
+def _openalex_base_params() -> Dict[str, str]:
+    """Build common OpenAlex query params from environment."""
+    params: Dict[str, str] = {}
+    api_key = os.environ.get('OPENALEX_API_KEY')
+    mailto = os.environ.get('OPENALEX_MAILTO')
+    if api_key:
+        params['api_key'] = api_key
+    if mailto:
+        params['mailto'] = mailto
+    return params
+
+
+def _openalex_min_interval_seconds() -> float:
+    """Polite pacing between OpenAlex requests; stricter when no API key is configured."""
+    return 0.25 if os.environ.get('OPENALEX_API_KEY') else 1.0
+
+
+def _openalex_wait_slot() -> None:
+    """Respect global pacing/cooldown before the next OpenAlex request."""
+    global _OPENALEX_LAST_REQUEST_TS
+    now = time.time()
+    if _OPENALEX_COOLDOWN_UNTIL > now:
+        time.sleep(_OPENALEX_COOLDOWN_UNTIL - now)
+        now = time.time()
+    wait = _openalex_min_interval_seconds() - (now - _OPENALEX_LAST_REQUEST_TS)
+    if wait > 0:
+        time.sleep(wait)
+    _OPENALEX_LAST_REQUEST_TS = time.time()
+
+
+def _openalex_parse_retry_after(headers: Mapping[str, str]) -> Optional[int]:
+    """Return Retry-After (seconds) when provided and parseable."""
+    retry_after = headers.get('Retry-After') if headers else None
+    if not retry_after:
+        return None
+    try:
+        return max(0, int(retry_after))
+    except (TypeError, ValueError):
+        return None
+
+
+def _openalex_request_json(path: str, params: Optional[Dict[str, str]] = None, max_attempts: int = 6) -> dict:
+    """Perform resilient OpenAlex JSON GET with retries for transient errors and 429."""
+    global _OPENALEX_COOLDOWN_UNTIL
+    url = f"https://api.openalex.org{path}"
+    merged_params = _openalex_base_params()
+    if params:
+        merged_params.update(params)
+
+    for attempt in range(1, max_attempts + 1):
+        _openalex_wait_slot()
+        try:
+            response = _OPENALEX_SESSION.get(
+                url,
+                params=merged_params,
+                headers={"Accept": "application/json", "User-Agent": "REIMPACT/2.0"},
+                timeout=30,
+            )
+            _OPENALEX_RATE_LOG.append((time.time(), response.status_code))
+
+            if response.status_code == 404:
+                raise ValueError(f"OpenAlex resource not found: {path}")
+
+            if response.status_code == 429:
+                retry_after = _openalex_parse_retry_after(response.headers)
+                delay = retry_after if retry_after is not None else max(5, 2 ** (attempt - 1))
+                _OPENALEX_COOLDOWN_UNTIL = max(_OPENALEX_COOLDOWN_UNTIL, time.time() + delay)
+                if attempt < max_attempts:
+                    logger.warning(
+                        "OpenAlex rate limit reached (429) on %s. Retrying in %ss (%s/%s).",
+                        path,
+                        delay,
+                        attempt,
+                        max_attempts,
+                    )
+                    continue
+                raise ValueError(f"OpenAlex rate limit reached repeatedly (429) on {path}")
+
+            if response.status_code in (500, 502, 503, 504):
+                delay = max(2, 2 ** (attempt - 1))
+                if attempt < max_attempts:
+                    logger.warning(
+                        "OpenAlex transient HTTP error %s on %s. Retrying in %ss (%s/%s).",
+                        response.status_code,
+                        path,
+                        delay,
+                        attempt,
+                        max_attempts,
+                    )
+                    time.sleep(delay)
+                    continue
+                raise ValueError(f"OpenAlex HTTP error {response.status_code} on {path}")
+
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as exc:
+            if attempt < max_attempts and _is_transient_openalex_error(exc):
+                delay = max(1, 2 ** (attempt - 1))
+                logger.warning(
+                    "OpenAlex network error on %s: %s. Retrying in %ss (%s/%s).",
+                    path,
+                    exc,
+                    delay,
+                    attempt,
+                    max_attempts,
+                )
+                time.sleep(delay)
+                continue
+            raise ValueError(f"OpenAlex request failed for {path}: {exc}") from exc
+
+    raise ValueError(f"OpenAlex request failed after {max_attempts} attempts for {path}")
+
+
+def _fetch_openalex_work_by_doi(cleaned_doi: str) -> dict:
+    """Retrieve an OpenAlex work by DOI through resilient direct API calls."""
+    encoded_doi = quote(cleaned_doi, safe='')
+    data = _openalex_request_json(f"/works/https://doi.org/{encoded_doi}")
+    if not isinstance(data, dict):
+        raise ValueError(f"Unexpected OpenAlex payload type for DOI {cleaned_doi}: {type(data)}")
+    return data
+
+
+def _write_dataframe_excel_chunked(
+    writer: pd.ExcelWriter,
+    df: pd.DataFrame,
+    base_sheet_name: str,
+    max_rows: int = EXCEL_MAX_ROWS,
+) -> None:
+    """Write a DataFrame to one or more Excel sheets, chunking by row limit when necessary."""
+    if df is None or df.empty:
+        return
+
+    if df.shape[1] > EXCEL_MAX_COLS:
+        raise ValueError(
+            f"DataFrame has {df.shape[1]} columns, which exceeds the Excel column limit of {EXCEL_MAX_COLS}."
+        )
+
+    # Excel's row limit includes the header row, so reserve one row for column names.
+    data_rows_per_sheet = max_rows - 1
+
+    if len(df) <= data_rows_per_sheet:
+        df.to_excel(writer, sheet_name=base_sheet_name, index=False)
+        return
+
+    total_chunks = (len(df) + data_rows_per_sheet - 1) // data_rows_per_sheet
+    logger.warning(
+        "DataFrame '%s' has %d rows and exceeds the Excel sheet limit (%d). Splitting into %d sheets.",
+        base_sheet_name,
+        len(df),
+        max_rows,
+        total_chunks,
+    )
+    for chunk_index, start in enumerate(range(0, len(df), data_rows_per_sheet), start=1):
+        end = min(start + data_rows_per_sheet, len(df))
+        chunk = df.iloc[start:end]
+        sheet_name = f"{base_sheet_name}_{chunk_index}"
+        if len(sheet_name) > 31:
+            sheet_name = sheet_name[:31]
+        chunk.to_excel(writer, sheet_name=sheet_name, index=False)
+
+
+def _tsv_fallback_path(base_output_path: str, stem: str) -> str:
+    """Return a lossless TSV fallback path next to the Excel output file."""
+    base_dir = os.path.dirname(base_output_path)
+    filename = f"{stem}.full.tsv"
+    return os.path.join(base_dir, filename) if base_dir else filename
+
+
+def _maybe_write_tsv_fallback(df: pd.DataFrame, excel_output_path: str, stem: str) -> None:
+    """Write a full TSV fallback when the DataFrame exceeds Excel sheet limits."""
+    if df is None or df.empty:
+        return
+    if len(df) <= (EXCEL_MAX_ROWS - 1) and df.shape[1] <= EXCEL_MAX_COLS:
+        return
+
+    tsv_path = _tsv_fallback_path(excel_output_path, stem)
+    df.to_csv(tsv_path, sep='\t', index=False, encoding='utf-8')
+    logger.warning(
+        "DataFrame '%s' exceeds Excel limits (rows=%d, cols=%d). Excel is saved in chunks and a full TSV fallback was written to %s.",
+        stem,
+        len(df),
+        df.shape[1],
+        tsv_path,
+    )
+
+
+def _normalize_yearly_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize yearly citation columns before combining providers."""
+    if df is None or df.empty:
+        return df
+
+    year_columns = {}
+    provider = None
+    for column in df.columns:
+        column_name = str(column)
+        if column_name.lower() == 'provider':
+            if provider is None:
+                provider = df[column]
+            continue
+        if re.fullmatch(r'\d{4}', column_name):
+            year_columns.setdefault(column_name, []).append(df[column])
+
+    normalized = pd.DataFrame(index=df.index)
+    for year in sorted(year_columns, key=int):
+        values = pd.concat(year_columns[year], axis=1)
+        normalized[year] = values.bfill(axis=1).iloc[:, 0]
+    if provider is not None:
+        normalized['provider'] = provider
+    return normalized
 
 class OpenAlexDoi:
     def __init__(self, service, applicant, platform, doi) -> None:
@@ -158,29 +457,13 @@ class OpenAlexDoi:
             raise ValueError(f"Invalid DOI: {doi}")
         self.doi = cleaned_doi
         
-        # Direct access using DOI URL (original logic)
+        # DOI metadata retrieval through resilient direct OpenAlex API call.
         try:
-            obj = pyalex.Works()[f"https://doi.org/{cleaned_doi}"]
-            logger.debug(f"pyalex.Works() returned type: {type(obj)}; repr: {repr(obj)}")
-            # pyalex may return OpenAlexResponseList, tuple, list, or dict. Always get dict.
-            if isinstance(obj, dict):
-                self.object = obj
-            elif type(obj).__name__ == 'OpenAlexResponseList' and hasattr(obj, '__len__') and len(obj) > 0 and isinstance(obj[0], dict):
-                self.object = obj[0]
-            elif isinstance(obj, (list, tuple)) and len(obj) > 0 and isinstance(obj[0], dict):
-                self.object = obj[0]
-            else:
-                logger.error(f"pyalex.Works() returned unexpected type: {type(obj)}; repr: {repr(obj)}")
-                raise TypeError(f"pyalex.Works() did not return a dict for DOI {cleaned_doi}. Type: {type(obj)}. See logs for details.")
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 404:
+            self.object = _fetch_openalex_work_by_doi(cleaned_doi)
+        except ValueError as exc:
+            if "not found" in str(exc).lower():
                 raise ValueError(f"DOI not found in OpenAlex: {cleaned_doi}")
-            else:
-                raise ValueError(f"OpenAlex HTTP error {e.response.status_code} for DOI {cleaned_doi}: {e}")
-        except requests.exceptions.RequestException as e:
-            raise ValueError(f"Network error retrieving DOI {cleaned_doi} from OpenAlex: {e}")
-        except KeyError as e:
-            raise ValueError(f"DOI not found in OpenAlex: {cleaned_doi}")
+            raise
         except Exception as e:
             logger.error(f"Exception in OpenAlexDoi __init__: {e}")
             raise ValueError(f"Failed to retrieve DOI {cleaned_doi} from OpenAlex: {e}")
@@ -229,21 +512,17 @@ class OpenAlexDoi:
         logger.debug(f"work_id: {work_id} | openalex_id: {openalex_id}")
 
         # Use OpenAlex API directly
-        api_key = os.environ.get('OPENALEX_API_KEY', None)
-        headers = {"Accept": "application/json"}
         params = {"filter": f"cites:{openalex_id}", "per-page": 200}
-        if api_key:
-            params["api_key"] = api_key
         page = 1
         total_cited_by = 0
         rows = []
         while True:
             params["page"] = page
-            response = requests.get("https://api.openalex.org/works", headers=headers, params=params)
-            if response.status_code != 200:
-                logger.debug(f"OpenAlex API error {response.status_code}: {response.text}")
+            try:
+                data = _openalex_request_json("/works", params=params)
+            except ValueError as exc:
+                logger.debug(f"OpenAlex API error while fetching citing works for DOI {self.doi}: {exc}")
                 break
-            data = response.json()
             results = data.get("results", [])
             if not results:
                 break
@@ -607,6 +886,16 @@ def main():
     except Exception as e:
         logger.error(f"Failed to load input Excel: {e}")
         sys.exit(1)
+    checkpoint_dir = _openalex_checkpoint_dir(args.output)
+    checkpoint_summary_path = _openalex_summary_checkpoint_path(checkpoint_dir)
+    openalex_ckpt_records: Dict[str, dict] = {}
+    if args.resume:
+        openalex_ckpt_records = _load_openalex_summary_checkpoint(checkpoint_summary_path)
+        if openalex_ckpt_records:
+            logger.info(f"Loaded OpenAlex checkpoint with {len(openalex_ckpt_records)} service(s): {checkpoint_summary_path}")
+    else:
+        logger.info("OpenAlex checkpoint resume disabled; processing all services from scratch.")
+
     # Prompt for database selection
     search_config = choose_search_databases(args)
 
@@ -617,6 +906,16 @@ def main():
         openalex_citations = []
         openalex_citations_of_citing = []
         openalex_any_success = False
+        openalex_yearly_by_service = {}
+        institutions_frames = []
+        institutions_of_citing_frames = []
+        checkpoint_services_dir = os.path.join(checkpoint_dir, "services")
+        checkpoint_institutions_dir = os.path.join(checkpoint_dir, "institutions")
+        checkpoint_citing_institutions_dir = os.path.join(checkpoint_dir, "institutions_of_citing")
+        if args.resume:
+            os.makedirs(checkpoint_services_dir, exist_ok=True)
+            os.makedirs(checkpoint_institutions_dir, exist_ok=True)
+            os.makedirs(checkpoint_citing_institutions_dir, exist_ok=True)
         
         for idx, row in src.iterrows():
             service = row[service_col]
@@ -625,18 +924,82 @@ def main():
             doi_string = row[doi_col]
             logger.info(f"\n📰 Processing service: {service}")
 
+            service_key = str(service)
+            safe_service = _safe_service_filename(service_key)
+            yearly_ckpt_path = os.path.join(checkpoint_services_dir, f"{safe_service}.csv")
+            inst_ckpt_path = os.path.join(checkpoint_institutions_dir, f"{safe_service}.tsv")
+            inst_citing_ckpt_path = os.path.join(checkpoint_citing_institutions_dir, f"{safe_service}.tsv")
+
+            existing = openalex_ckpt_records.get(service_key) if args.resume else None
+            if existing and existing.get('status') == 'success' and os.path.exists(yearly_ckpt_path):
+                try:
+                    openalex_citations.append(existing.get('openalex_citations', np.nan))
+                    openalex_citations_of_citing.append(existing.get('openalex_citations_of_citing', np.nan))
+                    openalex_yearly_by_service[service_key] = pd.read_csv(yearly_ckpt_path, index_col=0)
+                    if os.path.exists(inst_ckpt_path):
+                        inst_df = pd.read_csv(inst_ckpt_path, sep='\t')
+                        if not inst_df.empty:
+                            institutions_frames.append(inst_df)
+                    if os.path.exists(inst_citing_ckpt_path):
+                        inst_citing_df = pd.read_csv(inst_citing_ckpt_path, sep='\t')
+                        if not inst_citing_df.empty:
+                            institutions_of_citing_frames.append(inst_citing_df)
+                    openalex_any_success = True
+                    logger.info(f"🧩 Loaded OpenAlex checkpoint for service: {service}")
+                    continue
+                except Exception as exc:
+                    logger.warning(f"Checkpoint for service '{service}' is invalid/corrupted ({exc}). Recomputing.")
+
             try:
                 service_obj = OpenAlexService(service, applicant, platform, doi_string)
-                OpenAlexServiceDict[service] = service_obj
+                OpenAlexServiceDict[service_key] = service_obj
                 openalex_citations.append(service_obj.citations)
                 openalex_citations_of_citing.append(service_obj.citationsOfCiting)
+                openalex_yearly_by_service[service_key] = service_obj.mgd_citby_year
+
+                if service_obj.institutions is not None and not service_obj.institutions.empty:
+                    institutions_frames.append(service_obj.institutions)
+                if service_obj.institutionsOfCiting is not None and not service_obj.institutionsOfCiting.empty:
+                    institutions_of_citing_frames.append(service_obj.institutionsOfCiting)
+
+                if args.resume:
+                    service_obj.mgd_citby_year.to_csv(yearly_ckpt_path)
+                    if service_obj.institutions is not None and not service_obj.institutions.empty:
+                        service_obj.institutions.to_csv(inst_ckpt_path, sep='\t', index=False, encoding='utf-8')
+                    elif os.path.exists(inst_ckpt_path):
+                        os.remove(inst_ckpt_path)
+
+                    if service_obj.institutionsOfCiting is not None and not service_obj.institutionsOfCiting.empty:
+                        service_obj.institutionsOfCiting.to_csv(inst_citing_ckpt_path, sep='\t', index=False, encoding='utf-8')
+                    elif os.path.exists(inst_citing_ckpt_path):
+                        os.remove(inst_citing_ckpt_path)
+
+                    openalex_ckpt_records[service_key] = {
+                        'service': service_key,
+                        'applicant': str(applicant),
+                        'platform': str(platform),
+                        'status': 'success',
+                        'openalex_citations': service_obj.citations,
+                        'openalex_citations_of_citing': service_obj.citationsOfCiting,
+                    }
+                    _persist_openalex_summary_checkpoint(checkpoint_summary_path, openalex_ckpt_records)
                 openalex_any_success = True
                 logger.info(f"\r📰 Processing service: {service} ✅")
             except Exception as e:
                 logger.warning(f"OpenAlex retrieval failed for service '{service}': {e}")
-                OpenAlexServiceDict[service] = None
+                OpenAlexServiceDict[service_key] = None
                 openalex_citations.append(np.nan)
                 openalex_citations_of_citing.append(np.nan)
+                if args.resume:
+                    openalex_ckpt_records[service_key] = {
+                        'service': service_key,
+                        'applicant': str(applicant),
+                        'platform': str(platform),
+                        'status': 'failed',
+                        'openalex_citations': np.nan,
+                        'openalex_citations_of_citing': np.nan,
+                    }
+                    _persist_openalex_summary_checkpoint(checkpoint_summary_path, openalex_ckpt_records)
 
         if not openalex_any_success and not search_config.get('scopus', False):
             logger.error("Stopping execution: OpenAlex is unavailable and no other database is selected.")
@@ -647,20 +1010,10 @@ def main():
         logger.info('\n🔍  Starting OpenAlex impact data elaboration...')
         src['OpenAlexCitationsOfCiting'] = openalex_citations_of_citing
         
-        # Collect institutions only from successful retrievals
-        institutions = pd.concat(
-            [el.institutions for el in OpenAlexServiceDict.values() 
-             if el is not None and el.institutions is not None], 
-            axis=0, 
-            ignore_index=True
-        ) if any(el is not None and el.institutions is not None for el in OpenAlexServiceDict.values()) else pd.DataFrame()
-        
-        institutionsOfCitings = pd.concat(
-            [el.institutionsOfCiting for el in OpenAlexServiceDict.values() 
-             if el is not None and el.institutionsOfCiting is not None and not el.institutionsOfCiting.empty], 
-            axis=0,
-            ignore_index=True
-        ) if any(el is not None and el.institutionsOfCiting is not None and not el.institutionsOfCiting.empty for el in OpenAlexServiceDict.values()) else pd.DataFrame()
+        # Collect institutions from live retrieval and checkpoints.
+        institutions = pd.concat(institutions_frames, axis=0, ignore_index=True) if institutions_frames else pd.DataFrame()
+
+        institutionsOfCitings = pd.concat(institutions_of_citing_frames, axis=0, ignore_index=True) if institutions_of_citing_frames else pd.DataFrame()
         if not institutionsOfCitings.empty:
             dedup_cols = [
                 col for col in ['service', 'applicant', 'platform', 'doi', 'doiOfCiting', 'institution', 'country']
@@ -672,6 +1025,7 @@ def main():
                 ).reset_index(drop=True)
     else:
         OpenAlexServiceDict = {}
+        openalex_yearly_by_service = {}
         src = src.drop(columns=['OpenAlexCitations', 'OpenAlexCitationsOfCiting'], errors='ignore')
         institutions = pd.DataFrame()
         institutionsOfCitings = pd.DataFrame()
@@ -735,23 +1089,24 @@ def main():
     
     # Write Excel file
     with pd.ExcelWriter(args.output) as buf:
-        src.to_excel(buf, sheet_name='summary')
+        _write_dataframe_excel_chunked(buf, src, 'summary')
         if not institutions.empty:
-            institutions.to_excel(buf, sheet_name='institutions')
+            _write_dataframe_excel_chunked(buf, institutions, 'institutions')
         if not institutionsOfCitings.empty:
-            institutionsOfCitings.to_excel(buf, sheet_name='institutionsOfCitings')
+            _write_dataframe_excel_chunked(buf, institutionsOfCitings, 'institutionsOfCitings')
+
+    _maybe_write_tsv_fallback(src, args.output, 'summary')
+    _maybe_write_tsv_fallback(institutions, args.output, 'institutions')
+    _maybe_write_tsv_fallback(institutionsOfCitings, args.output, 'institutionsOfCitings')
     
     logger.info('\n🗃️  Starting service-specific data storage...')
     # Create services directory in the same directory as the output file
     services_dir = os.path.join(output_dir if output_dir else '.', "services")
     os.makedirs(services_dir, exist_ok=True)
-    for k, df in OpenAlexServiceDict.items():
-        if df is None:
-            logger.warning(f"Skipping {k} (failed during retrieval)")
-            continue
+    for k, yearly_df in openalex_yearly_by_service.items():
         if not scopus_failed and search_config['scopus'] and k in PyBlioInstanceDict and PyBlioInstanceDict[k] is not None:
             scopus_df = PyBlioInstanceDict[k].cit4year
-            openalex_df = df.mgd_citby_year
+            openalex_df = yearly_df
             # Only concat if both have data to avoid FutureWarning
             if not scopus_df.empty and not openalex_df.empty:
                 aux = pd.concat([scopus_df, openalex_df], axis=0)
@@ -760,9 +1115,10 @@ def main():
             else:
                 aux = openalex_df
         else:
-            aux = df.mgd_citby_year
+            aux = yearly_df
+        aux = _normalize_yearly_dataframe(aux)
         aux.fillna(0, inplace=True)
-        aux.to_csv(os.path.join(services_dir, re.sub(r"[/@)(]", "_", k) + ".csv"))
+        aux.to_csv(os.path.join(services_dir, _safe_service_filename(k) + ".csv"))
 
     logger.info(f"\n✅ All data saved successfully to {args.output}")
     logger.info(f"\n✅ Service-specific data saved to {services_dir}")
