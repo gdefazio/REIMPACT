@@ -3,7 +3,10 @@ package:
   version: {{ environ.get('VERSION', '0.1.0') }}
 
 source:
-  path: ..
+  - path: ../reimpact
+    folder: reimpact
+  - path: ../setup.py
+    folder: .
 
 build:
   noarch: python
